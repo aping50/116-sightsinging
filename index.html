@@ -1,0 +1,2314 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>無調性視唱互動訓練與即時音準偵測系統</title>
+<script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.5/build/cjs/vexflow.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<style>
+  :root {
+    --bg: #f4f6fb;
+    --card: #ffffff;
+    --primary: #2b3a67;
+    --accent: #e86a58;
+    --ok: #16a34a;
+    --sharp: #ea580c;
+    --flat: #2563eb;
+    --text: #1e293b;
+    --border: #dbe2ef;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 18px;
+    background: var(--bg); color: var(--text);
+    font-family: system-ui, "Noto Sans TC", sans-serif;
+  }
+  .container { max-width: 1120px; margin: 0 auto; }
+  header {
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px;
+    background: var(--primary); color: #fff;
+    padding: 14px 20px; border-radius: 14px; margin-bottom: 14px;
+    box-shadow: 0 4px 14px rgba(43,58,103,.15);
+  }
+  header h1 { font-size: 1.25rem; margin: 0; }
+  header .sub { font-size: .85rem; opacity: .88; margin-top: 3px; }
+  .header-badge {
+    background: rgba(255,255,255,.14);
+    border: 1px solid rgba(255,255,255,.25);
+    padding: 6px 14px; border-radius: 99px;
+    font-size: .95rem; font-weight: 700;
+  }
+  .panel {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 14px 18px; margin-bottom: 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.04);
+  }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .control-row {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+    width: 100%;
+  }
+  .control-row + .control-row {
+    margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border);
+  }
+  select, button, input[type="number"] {
+    font-size: .95rem; border-radius: 8px; padding: 7px 12px;
+    border: 1px solid var(--border);
+  }
+  select, button { cursor: pointer; }
+  button {
+    background: var(--primary); color: #fff; border: none; font-weight: 600;
+    transition: transform .08s, opacity .15s;
+  }
+  button:hover:not(:disabled) { opacity: .92; }
+  button:active:not(:disabled) { transform: scale(.98); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.sing-btn { background: var(--accent); font-size: 1rem; padding: 9px 18px; }
+  button.sec-btn { background: #fff; color: var(--primary); border: 1.5px solid var(--primary); }
+
+  /* 速度控制專屬區塊 */
+  .tempo-box {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    background: #f8fafc; border: 1px solid var(--border);
+    border-radius: 10px; padding: 6px 12px;
+  }
+  .tempo-box input[type="range"] {
+    width: 160px; height: 28px; margin: 0;
+    accent-color: var(--primary); cursor: pointer;
+    touch-action: pan-x;
+  }
+  .tempo-box input[type="number"] {
+    width: 68px; text-align: center; font-weight: 700; color: var(--primary);
+    padding: 5px 6px;
+  }
+  .step-btn {
+    background: #e2e8f0; color: var(--text); padding: 5px 10px; font-size: .85rem;
+  }
+  .preset-btn {
+    background: #fff; color: var(--primary); border: 1px solid #cbd5e1;
+    padding: 4px 9px; font-size: .82rem; border-radius: 6px;
+  }
+  .preset-btn.active {
+    background: var(--primary); color: #fff; border-color: var(--primary);
+  }
+
+  .status-banner {
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+    background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 10px;
+    padding: 10px 16px; margin-bottom: 12px; font-weight: 600; gap: 10px;
+  }
+  #phaseText { font-size: 1.02rem; color: var(--primary); }
+  .tuner-box {
+    display: flex; align-items: center; gap: 10px; font-size: .9rem;
+  }
+  .tuner-bar {
+    position: relative; width: 200px; height: 14px;
+    background: #e2e8f0; border-radius: 99px; overflow: hidden;
+  }
+  .tuner-safe {
+    position: absolute; left: 40%; width: 20%; height: 100%;
+    background: rgba(22,163,74,.28); border-left: 1px dashed var(--ok); border-right: 1px dashed var(--ok);
+  }
+  #tunerNeedle {
+    position: absolute; top: 0; left: 50%; width: 4px; height: 100%;
+    background: var(--primary); transform: translateX(-50%); transition: left .06s linear;
+  }
+
+  /* 測驗結算評語卡片 */
+  .result-card {
+    display: none;
+    align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;
+    padding: 14px 20px; border-radius: 12px; margin-bottom: 12px;
+    border: 2px solid transparent;
+    animation: popIn .28s cubic-bezier(.2, .8, .2, 1);
+  }
+  .result-card.show { display: flex; }
+  @keyframes popIn {
+    from { opacity: 0; transform: translateY(-6px) scale(.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .result-main {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .result-icon {
+    font-size: 2rem; line-height: 1;
+  }
+  .result-comment {
+    font-size: 1.35rem; font-weight: 800; letter-spacing: .5px;
+  }
+  .result-detail {
+    font-size: .9rem; opacity: .88; margin-top: 2px; font-weight: 600;
+  }
+  .result-meter {
+    display: flex; align-items: center; gap: 10px; min-width: 210px;
+  }
+  .meter-track {
+    flex: 1; height: 10px; background: rgba(0,0,0,.1);
+    border-radius: 99px; overflow: hidden;
+  }
+  .meter-fill {
+    height: 100%; width: 0%; background: currentColor;
+    border-radius: 99px; transition: width .45s ease-out;
+  }
+  .meter-pct {
+    font-size: 1.2rem; font-weight: 800; min-width: 52px; text-align: right;
+  }
+
+  /* 六種評語等級配色 */
+  .fb-god    { background: linear-gradient(135deg, #fef9c3, #fde047); border-color: #eab308; color: #854d0e; }
+  .fb-great  { background: #dcfce7; border-color: #22c55e; color: #166534; }
+  .fb-good   { background: #e0f2fe; border-color: #0ea5e9; color: #075985; }
+  .fb-fair   { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+  .fb-low    { background: #ffedd5; border-color: #f97316; color: #9a3412; }
+  .fb-rookie { background: #ffe4e6; border-color: #f43f5e; color: #9f1239; }
+
+  .score-wrap {
+    position: relative; overflow-x: auto; background: #fff;
+    border: 1px solid var(--border); border-radius: 12px; padding: 10px;
+  }
+  #scoreCanvas { min-width: 1050px; height: 215px; position: relative; }
+  #overlay { position: absolute; inset: 0; pointer-events: none; }
+  .beat-cursor {
+    position: absolute; top: 22px; width: 34px; height: 155px;
+    background: rgba(232,106,88,.16); border: 2px solid var(--accent);
+    border-radius: 6px; transform: translateX(-10px); transition: left .08s ease-out;
+  }
+  .pitch-tag {
+    position: absolute; transform: translateX(-35%);
+    font-size: 11.5px; font-weight: 700; padding: 2px 6px;
+    border-radius: 5px; white-space: nowrap;
+  }
+  .tag-ok { background: #dcfce7; color: var(--ok); border: 1px solid #86efac; }
+  .tag-sharp { background: #ffedd5; color: var(--sharp); border: 1px solid #fdba74; }
+  .tag-flat { background: #dbeafe; color: var(--flat); border: 1px solid #93c5fd; }
+  .tag-miss { background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; }
+  #songNum { width: 84px; text-align: center; font-weight: 700; color: var(--primary); }
+  .song-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; padding: 6px 12px; }
+  .opt-label { display: inline-flex; align-items: center; gap: 6px; font-size: .9rem; color: #475569; cursor: pointer; }
+  .opt-label input { cursor: pointer; }
+  .mini-info { font-size: .85rem; color: #64748b; }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 16px; font-size: .88rem; margin-top: 10px; color: #475569;
+  }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
+
+  /* 即時音準切換按鈕 */
+  .tuner-toggle-btn {
+    background: #fff; color: var(--primary); border: 1.5px solid #cbd5e1;
+    padding: 4px 10px; font-size: .82rem; border-radius: 99px; font-weight: 700;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .tuner-toggle-btn.off {
+    background: #f1f5f9; color: #64748b; border-color: #cbd5e1;
+  }
+  .tuner-bar.masked {
+    opacity: .28;
+  }
+
+  /* 結算卡片內的練習本互動區 */
+  .result-notebook-bar {
+    width: 100%;
+    margin-top: 8px; padding-top: 10px;
+    border-top: 1px dashed rgba(0,0,0,.18);
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    font-size: .92rem;
+  }
+  .nb-inline-input, .nb-inline-select {
+    padding: 5px 10px; border-radius: 8px; border: 1px solid rgba(0,0,0,.22);
+    background: rgba(255,255,255,.92); color: var(--text); font-size: .9rem; font-weight: 600;
+  }
+  .nb-inline-input { width: 145px; }
+  .nb-save-btn {
+    background: var(--primary); color: #fff; padding: 6px 13px;
+    font-size: .88rem; border-radius: 8px;
+  }
+  .nb-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: rgba(255,255,255,.85); border: 1px solid rgba(0,0,0,.15);
+    padding: 3px 9px; border-radius: 99px; font-size: .82rem; font-weight: 700;
+  }
+  .nb-pill button {
+    background: none; color: inherit; padding: 0 2px; font-size: .85rem; line-height: 1;
+  }
+
+  /* 我的練習本彈窗 */
+  .modal-backdrop {
+    display: none; position: fixed; inset: 0; z-index: 999;
+    background: rgba(15, 23, 42, .52); align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal-box {
+    background: #fff; width: 100%; max-width: 760px; max-height: 86vh;
+    border-radius: 16px; box-shadow: 0 18px 40px rgba(0,0,0,.22);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .modal-header {
+    background: var(--primary); color: #fff; padding: 14px 20px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .modal-header h2 { margin: 0; font-size: 1.12rem; }
+  .modal-close {
+    background: rgba(255,255,255,.18); color: #fff; border-radius: 8px;
+    padding: 4px 10px; font-size: .95rem;
+  }
+  .modal-tabs {
+    display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 18px 8px;
+    background: #f8fafc; border-bottom: 1px solid var(--border);
+  }
+  .nb-tab {
+    background: #fff; color: var(--text); border: 1px solid var(--border);
+    padding: 6px 12px; border-radius: 99px; font-size: .88rem; font-weight: 600;
+  }
+  .nb-tab.active {
+    background: var(--primary); color: #fff; border-color: var(--primary);
+  }
+  .nb-tab.tier-master.active {
+    background: #b45309; border-color: #b45309;
+  }
+  .nb-tab.tier-improve.active {
+    background: #0369a1; border-color: #0369a1;
+  }
+  .nb-tab.tier-practice.active {
+    background: #15803d; border-color: #15803d;
+  }
+  .modal-toolbar {
+    padding: 10px 18px; background: #fff; border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px;
+  }
+  .modal-body {
+    padding: 14px 18px; overflow-y: auto; flex: 1;
+  }
+  .nb-item {
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px;
+    padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px;
+    margin-bottom: 8px; background: #f8fafc;
+  }
+  .nb-item-title { font-weight: 700; color: var(--primary); font-size: .98rem; }
+  .nb-item-meta { font-size: .84rem; color: #64748b; margin-top: 2px; }
+  .nb-item-actions { display: flex; gap: 6px; }
+  .modal-footer {
+    padding: 10px 18px; background: #f8fafc; border-top: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px;
+    font-size: .84rem; color: #64748b;
+  }
+
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div>
+      <h1>無調性視唱互動訓練與即時音準偵測系統</h1>
+      <div class="sub">題庫模式（共 700 題，可指定題號或隨機）｜首音提示 ＋ 4 拍預備拍 ＋ 即時音準偵測（容許範圍 ±20 音分）</div>
+    </div>
+    <div id="summaryScore" class="header-badge">尚未測驗</div>
+  </header>
+
+  <div class="panel controls">
+    <div class="control-row">
+      <div class="song-picker">
+        <strong>📚 題號：</strong>
+        <button class="sec-btn" id="prevBtn" title="上一題">◀</button>
+        <input type="number" id="songNum" min="1" max="700" step="1" value="1">
+        <span>/ <span id="totalNum">700</span></span>
+        <button class="sec-btn" id="nextBtn" title="下一題">▶</button>
+      </div>
+      <button class="sec-btn" id="randBtn">🎲 隨機抽題</button>
+      <button class="sec-btn" id="openNbBtn">📚 我的練習本 <span id="nbBadgeCount" style="background:#eef2ff;color:var(--primary);padding:1px 7px;border-radius:99px;font-size:.82rem;margin-left:2px;">0</span></button>
+      <button class="sec-btn" id="playFullBtn">▶ 從頭播到尾（範唱）</button>
+      <button class="sec-btn" id="playFirstBtn">🎵 僅聽第一個音</button>
+      <button class="sing-btn" id="startSingBtn">🎤 開始視唱（首音＋預備拍）</button>
+      <button class="sec-btn" id="stopBtn" disabled>⏹ 停止</button>
+    </div>
+
+    <div class="control-row">
+      <label class="opt-label">抽題範圍：
+        <select id="poolSelect" style="padding:4px 8px;font-size:.88rem;">
+          <option value="all">全部題庫（700 題）</option>
+          <option value="master">🏆 拿手好歌本（85% 以上）</option>
+          <option value="improve">💪 精益求精本（50%–84%）</option>
+          <option value="practice">🌱 加強練習本（未滿 50%）</option>
+        </select>
+      </label>
+      <label class="opt-label"><input type="checkbox" id="optNoRepeat" checked> 隨機不重複（抽完一輪才會重來）</label>
+      <span class="mini-info" id="randInfo"></span>
+      <button class="sec-btn" id="resetSeenBtn" style="padding:4px 10px;font-size:.85rem;">重置抽題紀錄</button>
+    </div>
+
+    <div class="control-row">
+      <div class="tempo-box">
+        <strong>⏱ 速度調整（40–100 BPM）：</strong>
+        <button type="button" class="step-btn" id="bpmMinus5" title="減 5 BPM">-5</button>
+        <button type="button" class="step-btn" id="bpmMinus1" title="減 1 BPM">-1</button>
+        <input type="range" id="bpmSlider" min="40" max="100" step="1" value="66">
+        <button type="button" class="step-btn" id="bpmPlus1" title="加 1 BPM">+1</button>
+        <button type="button" class="step-btn" id="bpmPlus5" title="加 5 BPM">+5</button>
+        <input type="number" id="bpmInput" min="40" max="100" step="1" value="66">
+        <span>BPM</span>
+        <span style="color:#94a3b8;margin:0 2px;">|</span>
+        <button type="button" class="preset-btn" data-bpm="40">40 慢練</button>
+        <button type="button" class="preset-btn" data-bpm="60">60 穩健</button>
+        <button type="button" class="preset-btn" data-bpm="80">80 中板</button>
+        <button type="button" class="preset-btn" data-bpm="100">100 原速</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="status-banner">
+      <div id="phaseText">準備就緒：請按「開始視唱」，系統將先播第一個音，4 拍預備拍後直接演唱。</div>
+      <div class="tuner-box">
+        <button type="button" class="tuner-toggle-btn" id="toggleLivePitchBtn" title="切換演唱時是否顯示即時音準指示">👁️ 即時音準提示：開啟</button>
+        <div class="tuner-bar" id="tunerBar">
+          <div class="tuner-safe" title="±20 音分合格區間"></div>
+          <div id="tunerNeedle"></div>
+        </div>
+        <span id="livePitchText" style="min-width:118px;">—</span>
+      </div>
+    </div>
+
+    <!-- 測驗結算評語卡片 -->
+    <div id="resultCard" class="result-card" role="status" aria-live="polite">
+      <div class="result-main">
+        <div id="resultIcon" class="result-icon">🎉</div>
+        <div>
+          <div id="resultComment" class="result-comment">評語</div>
+          <div id="resultDetail" class="result-detail">音準統計明細</div>
+        </div>
+      </div>
+      <div class="result-meter">
+        <div class="meter-track">
+          <div id="meterFill" class="meter-fill"></div>
+        </div>
+        <div id="meterPct" class="meter-pct">0%</div>
+      </div>
+      <div id="resultNotebookBar" class="result-notebook-bar"></div>
+    </div>
+
+    <div class="score-wrap">
+      <div id="scoreCanvas">
+        <div id="vex"></div>
+        <div id="overlay"></div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span><i class="dot" style="background:var(--ok)"></i><strong>準確（±20¢ 內）</strong>：綠色 ✓</span>
+      <span><i class="dot" style="background:var(--sharp)"></i><strong>偏高（> +20¢）</strong>：音符上方標示 ↑ +音分</span>
+      <span><i class="dot" style="background:var(--flat)"></i><strong>偏低（< -20¢）</strong>：音符下方標示 ↓ -音分</span>
+      <span>💡 建議戴耳機進行測驗，避免喇叭聲音回灌麥克風影響音準判定。</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- 我的練習本彈窗（潛力暖身本 + 自訂 XX 本） -->
+<div id="nbModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="nbModalTitle">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h2 id="nbModalTitle">📚 我的視唱練習本（測驗自動分級 ＋ 自訂收藏本）</h2>
+      <button type="button" class="modal-close" id="closeNbBtn">✕ 關閉</button>
+    </div>
+    <div class="modal-tabs" id="nbTabs"></div>
+    <div class="modal-toolbar" id="nbToolbar"></div>
+    <div class="modal-body" id="nbListBody"></div>
+    <div class="modal-footer">
+      <span>💡 已測驗自動歸類：<strong>85% 以上</strong> → 🏆 拿手好歌本｜<strong>50%–84%</strong> → 💪 精益求精本｜<strong>未滿 50%</strong> → 🌱 加強練習本</span>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button type="button" class="sec-btn" id="exportNbBtn" style="padding:4px 9px;font-size:.82rem;">匯出紀錄</button>
+        <button type="button" class="sec-btn" id="importNbBtn" style="padding:4px 9px;font-size:.82rem;">匯入紀錄</button>
+        <button type="button" class="sec-btn" id="resetNbBtn" style="padding:4px 9px;font-size:.82rem;color:#dc2626;border-color:#fca5a5;">🔄 重置全部練習本</button>
+        <input type="file" id="importNbFile" accept=".json" style="display:none;">
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ================= 1. 700 題視唱題庫（內嵌） =================
+// 格式：每行一題，4 個小節以「|」分隔，音符以空白分隔。
+//   音符  = 音名[升降]八度[!]:時值    例：f#4!:q 、 bb4!:h 、 c5:8
+//   休止  = r:時值                    例：r:q
+//   時值  : 8 = 八分、q = 四分、qd = 附點四分、h = 二分
+//   「!」 = 譜上有印出臨時記號（升降／還原）；無「!」則不顯示記號
+//   想修正某一題，直接改那一行即可（第 N 行 = 第 N 題）。
+const SONG_DATA = [
+"c4:q e4:q f4:q gb4!:q | b4:q g4:8 ab4!:8 c5:q db4!:q | r:q e4:8 f#4!:8 eb4!:q a4:q | g4:q c#5!:q bb4!:h",
+"c4:q db4!:q a4:q f4:q | e4:8 a#4!:q g4:8 b4:q r:q | db5!:q c5:8 eb4!:8 g#4!:q a4:q | f4:q b3:q d#4!:q c4:q",
+"c4:h e4:q a#4!:q | g4:qd ab4!:8 d5:q r:q | f4:q c#4!:q f#4!:q g4:8 bb4!:8 | c4:q d#4!:q a4:q f4:q",
+"c5:q a4:q g4:q db4!:q | f4:q e4:8 b4:8 gb4!:q r:8 c5:8 | g#4!:q f#4!:q a#4!:8 b3:qd | c#4!:q e#4!:q d4:h",
+"c4:q f4:q f#4!:qd c#5!:8 | a4:q a#4!:8 c5:8 g4:h | db4!:q e4:q ab4!:q g4:q | d5:8 e4:qd a4:q bb4!:q",
+"c4:q g4:q f#4!:qd g#4!:8 | a#4!:q e4:q c#5!:q r:q | bb4!:q e4:q a4:q f4:8 d4:8 | gb4!:qd c5:8 b4:h",
+"c4:q f4:q g#4!:q c5:q | f#4!:h g4:q r:q | f4:q b4:8 eb4!:8 bb4!:q c#4!:q | a4:8 b4:q g#4!:8 a#4!:h",
+"c4:q d#4!:8 a4:8 g#4!:q e4:q | d4:q ab4!:q b4:q r:q | db4!:q f4:8 g4:8 eb4!:q db5!:q | b4:h a4:h",
+"c4:q f4:q db4!:q eb4!:q | e4:qd c#4!:8 b4:q r:q | a4:8 f#4!:q g4:8 d5:q bb4!:q | ab4!:h cb4!:q d4:q",
+"c5:q b4:q a4:q c#5!:q | eb4!:q d4:8 g4:8 ab4!:q r:8 e4!:8 | f4:h bb4!:q f#4!:q | c4:h g#4!:8 e4:qd",
+"c4:q g4:q eb4!:q f4:q | e4:q f#4!:8 b4:8 r:8 a#4!:8 f4!:q | gb4!:h a4:q d5:q | e4:8 g#4!:qd c5:q b4:q",
+"c4:q b3:q d#4!:q e4:q | a#4!:qd g4:8 d5:q f4:q | eb4!:h c#5!:8 d5:8 bb4!:q | a4:8 c5:qd d#5!:q b4:q",
+"c4:q c#4!:q g#4!:q b4:q | bb4!:qd f#4!:8 a4:q e#4!:q | a4:8 g4:q d5:8 e4:qd f4:8 | d4:q d#4!:q g4:h",
+"c4:q d4:q ab4!:q g4:q | b4:8 eb4!:8 a4:q f4:qd c#4!:8 | bb4!:q r:q d#4!:q a4:q | c5:8 e#4!:qd b4:q g#4!:q",
+"c4:q g4:q c#4!:q e4:q | ab4!:q eb4!:8 b4:8 r:8 bb4!:q f4:8 | c5:q d4:q g#4!:h | d5:q gb4!:q a4:q f#4!:q",
+"c5:q f4:q bb4!:q ab4!:q | f#4!:8 g#4!:qd d4:q b4:q | r:q eb4!:q a4:8 g4:q c#4!:8 | e4:q d#4!:q b4:h",
+"c4:q eb4!:q a4:q f4:q | ab4!:qd d4:8 bb4!:8 c#5!:8 d#4!:q | f#4!:q r:q d5:q g#4!:q | e4:h b4:q g4:q",
+"c5:q g4:q ab4!:q f#4!:q | g4:qd d4:8 eb4!:q b4:q | a4:q g4:8 db5!:8 e4:h | f4:8 d#4!:qd a#4!:h",
+"c4:q d4:q f4:qd e4:8 | f#4!:q d#4!:8 g4:8 r:q bb4!:q | eb4!:8 db5!:qd ab4!:h | gb4!:q e4:q b4:q a4:q",
+"c4:q d4:q f#4!:q b4:q | db5!:q a4:8 c#5!:8 b4:h | d#4!:q a#4!:q g4:qd f4:8 | e4:8 d5:qd ab4!:h",
+"c5:q ab4!:q gb4!:q e4:q | g4:q c5:8 bb4!:8 eb4!:h | db4!:qd e4:8 b4:q f4:q | c#4!:q b4:q d5:8 b#4!:qd",
+"c4:q eb4!:q f4:8 db4!:qd | e4:q c#4!:q g4:q ab4!:q | g4:q b4:8 e#4!:8 f#4!:h | a4:qd d5:8 bb4!:q c4:q",
+"c5:q a4:q c#5!:qd b4:8 | f4:q e4:q r:q f#4!:q | g#4!:8 b4:q d#4!:8 e#4!:h | g4:8 eb4!:qd d4:q bb4!:q",
+"c5:q bb4!:q a4:qd f#4!:8 | g4:q f4:q r:q ab4!:q | g4:q d4:q c#5!:8 b#4!:8 e4:q | db4!:8 b4:qd a4:q eb4!:q",
+"c5:q c#5!:q a4:q e#4!:q | g4:qd f#4!:8 b4:h | a#4!:q e4:q f4:8 d4:q eb4!:8 | cb5!:h db4!:h",
+"c4:q b3:q f#4!:q g4:q | d4:qd g#4!:8 f4:q a4:q | r:q bb4!:q f4:8 eb4!:8 d5:q | b#4!:q g4:q db4!:q e4:q",
+"c4:q db4!:q gb4!:q f4:q | a4:h b4:8 g#4!:q b#4!:8 | d5:8 e4:qd r:q g4:q | d4:q bb4!:q d#5!:q f#4!:q",
+"c4:q eb4!:q f4:q g#4!:q | b4:q db5!:8 a4:8 b4:h | f#4!:8 g4:qd d4:q e4:q | c#5!:qd b#4!:8 d4:q a4:q",
+"c4:q e4:q d4:q db4!:q | f4:q c5:q bb4!:8 ab4!:q g4:8 | r:q d#4!:q b4:qd f#4!:8 | c#4!:h b#4!:q a4:q",
+"c5:q ab4!:q d5:q b4:q | d#4!:h f#4!:8 g4:qd | f4:q b4:8 eb4!:8 c#4!:q e#4!:q | a4:q a#4!:q e4:h",
+"c4:qd d4:8 f#4!:h | g4:q e4:q a4:q gb4!:q | cb5!:8 e4:qd d#4!:8 a#4!:q e4:8 | f4:q db4!:q c5:h",
+"c4:q e4:q g4:q f#4!:q | c5:q g#4!:8 c#4!:8 e#4!:h | a4:h gb4!:q d5:q | bb4!:qd cb5!:8 f4:h",
+"c5:q ab4!:q f4:8 gb4!:qd | b4:q d5:q a#4!:h | d4:q b#4!:q a4:q eb4!:8 db4!:8 | e4:q g4:h c#4!:q",
+"c4:q g4:q c#4!:qd e4:8 | f#4!:q e#4!:q r:q d4:q | a4:8 bb4!:q f4:8 cb5!:h | g4:8 eb4!:qd d4:q ab4!:q",
+"c4:q f4:q f#4!:qd c#5!:8 | d5:q a#4!:q c5:q b4:q | r:q eb4!:q a4:8 g4:8 db4!:q | f4:8 e4:qd a4:q bb4!:q",
+"c5:q ab4!:q g4:q c4:q | gb4!:q bb4!:8 a4:8 f#4!:h | d4:qd e4:8 db4!:q g4:q | e4:q b4:q d5:8 c#5!:qd",
+"c5:h a4:q f#4!:q | b4:qd g4:8 eb4!:q a4:q | d4:q e4:8 c#5!:8 b#4!:q g4:q | d#4!:h e4:q bb4!:q",
+"c4:q a4:q c#5!:q eb4!:q | g4:q d4:q bb4!:8 a4:qd | r:q c5:8 f#4!:8 e#4!:h | b4:qd g#4!:8 a#4!:q e4:q",
+"c4:q g4:q a4:q g#4!:q | b#4!:q f4:q r:q d#4!:8 c#5!:8 | g4:8 b4:q a#4!:8 e#4!:h | g4:q eb4!:q d4:q b4:q",
+"c4:q a4:q bb4!:qd f#4!:8 | g4:q e4:q f4:q b4:q | r:q a4:q c#5!:8 b#4!:8 g#4!:q | f4:8 g4:qd ab4!:q d4:q",
+"c4:q f#4!:q g4:q d4:q | f4:qd eb4!:8 ab4!:q c5:q | r:q cb5!:q e4:8 f4:8 g#4!:q | b4:q db4!:h a4:q",
+"c4:q eb4!:q f#4!:8 g4:qd | a4:q db5!:q c5:q b4:q | f4:q a4:8 d#4!:8 r:q e4:q | d4:8 g#4!:qd b4:q a#4!:q",
+"c4:q e4:q db4!:q a4:q | f4:8 a#4!:q b4:8 d5:q eb4!:q | r:q c5:8 bb4!:8 g#4!:q a4:q | d#4!:h f4:q g4:q",
+"c5:qd a4:8 f4:q gb4!:q | eb4!:q a4:8 d4:8 b4:h | r:q e4:q bb4!:q c#4!:q | d4:8 g#4!:qd b3:q d#4!:q",
+"c4:q f4:q e4:q ab4!:q | f#4!:h g4:q r:q | d4:q b4:q a#4!:q c#4!:8 e#4!:8 | a4:q db5!:8 g4:8 c5:h",
+"c4:q g#4!:q a4:q e4:q | f4:8 eb4!:q c#5!:8 g4:q r:q | f#4!:8 a4:qd b4:q bb4!:q | g4:qd g#4!:8 e4:q d#4!:q",
+"c4:q d4:q g4:q g#4!:q | f#4!:qd c#4!:8 e4:q a4:q | r:q eb4!:q bb4!:q d5:q | cb5!:q f4:8 a4:8 g4:h",
+"c4:q f4:q g4:qd f#4!:8 | c#5!:q b4:q eb4!:h | g#4!:q a4:q d5:8 e4:q bb4!:8 | a4:q g4:q d#4!:h",
+"c4:q db4!:q bb4!:q g4:q | g#4!:qd d5:8 ab4!:q e4:q | r:q a4:q gb4!:q f4:8 b4:8 | c#5!:q a4:q c5!:h",
+"c4:q c#4!:q e4:q a4:q | db4!:qd b4:8 e4:q a#4!:q | r:q g4:q ab4!:q f4:8 e4:8 | bb4!:q d5:q eb4!:q g4:q",
+"c4:q db4!:q eb4!:q c5:8 b4:8 | a#4!:qd d#4!:8 g4:q f4:q | r:q d5:q c#5!:q g4:q | e4:8 b4:qd a4:q f#4!:q",
+"c4:q eb4!:q b4:8 g#4!:qd | a4:q c#5!:q g4:8 d#4!:qd | e4:q bb4!:8 g4:8 r:q f#4!:q | e4:q f4:q a4:q db4!:q",
+"c#5!:q a4:q d5:q g#4!:q | f#4!:h e#4!:q r:q | g4:q c4:8 e4:8 bb4!:q ab4!:q | g4:qd db5!:8 b4:h",
+"db5!:q c5:q g4:q a4:q | b4:qd f4:8 g#4!:h | r:8 g4:8 c#4!:8 e4:8 d5:q ab4!:q | f#4!:h d#4!:h",
+"c#5!:q b4:q d5:h | a4:8 bb4!:qd g#4!:h | f4:q e4:8 ab4!:8 b3:q f#4!:q | r:q g4:q d5:h",
+"db5!:q bb4!:q gb4!:q f4:q | e4:qd b4:8 ab4!:h | g4:8 a4:8 c5:q d5:q g#4!:q | a4:q f#4!:q eb5!:h",
+"db5!:q c5:q a4:q b4:q | gb4!:q f4:8 e4:8 a#4!:h | d4:8 g4:q f#4!:8 d#5!:q b#4!:q | g#4!:h a4:h",
+"c#4!:q f4:q a4:q e4:8 a#4!:8 | d#4!:8 f4:qd e4:q r:q | ab4!:qd db5!:8 g4:q b4:q | c4:q d4:q g#4!:h",
+"db4!:q f4:q b4:h | a4:q bb4!:q r:q gb4!:q | ab4!:8 e4:q g4:8 d5:q c#5!:q | d#4!:8 f#4!:qd c5:h",
+"c#4!:q f4:q a#4!:q g4:q | b4:8 g#4!:q d4:8 c5:h | r:q a4:8 c#5!:8 e4:q d#4!:q | f4:q eb4!:q ab4!:h",
+"c#5!:h a4:q b4:q | d4:qd f#4!:8 e#4!:h | d#4!:q c5:8 ab4!:8 g4:q e4:q | eb4!:qd a4:8 f#4!:q g4:q",
+"db4!:h ab4!:q f4:q | e4:q bb4!:q f#4!:8 a4:qd | c5:q d4:8 a#4!:8 g4:h | r:q eb4!:q f4:q c#4!:q",
+"db4!:q e4:q b4:h | f#4!:qd c#4!:8 d4:q a4:q | b4:8 g#4!:q c5:8 e#4!:h | d#4!:q g4:q f4:h",
+"db4!:q g4:q e4:q f#4!:q | ab4!:q c4:q e4:8 c#4!:qd | r:q bb4!:q a4:q d4:8 g4:8 | b4:q f#4!:q g4:qd db5!:8",
+"c#4!:q e4:q ab4!:h | b4:q f#4!:8 g4:8 a4:q r:q | gb4!:q d4:q b4:h | c5:qd g#4!:8 d5:q a#4!:q",
+"db4!:q f4:q a4:q gb4!:q | c4:q e4:q b4:8 f#4!:qd | d5:qd g4:8 c5:q g#4!:q | r:q a#4!:8 d#5!:8 c#5!:h",
+"c#4!:q f4:q a#4!:q e4:q | g#4!:h d#4!:q c5:q | d4:8 eb4!:q gb4!:8 b4:h | c#5!:q a4:8 g4:8 c4:h",
+"c#4!:h g4:q a#4!:q | e4:q f4:8 ab4!:8 r:q b4:q | a4:h g#4!:q e4:q | db5!:q gb4!:q bb4!:8 c5:qd",
+"c#4!:q e4:q f4:qd g#4!:8 | g4:q db5!:q bb4!:h | b4:q e#4!:q f#4!:8 a4:qd | d4:q c5:8 ab4!:8 e4:h",
+"db4!:q f4:q e4:q g#4!:q | c5:h g4:8 ab4!:qd | b4:q d#5!:q f4:8 d4:q b#4!:8 | f#4!:q c5:q a4:h",
+"c#4!:q e4:q d4:q g4:q | f#4!:h a4:q b4:q | eb4!:q d5:h g#4!:8 b#4!:8 | d#4!:qd a4:8 f4:q ab4!:q",
+"c#4!:q d4:q f4:8 eb4!:qd | g4:q d5:h ab4!:q | bb4!:q cb5!:q e4:8 c4:8 a#4!:q | f#4!:h c5:q d4:q",
+"db4!:q g4:q f#4!:q g#4!:q | a4:qd b4:8 d5:q ab4!:q | f4:q e4:q a4:h | b4:8 c#5!:q e4:8 d#4!:q b#4!:q",
+"db4!:qd f4:8 g4:q a4:q | e4:q c4:q f#4!:h | d5:8 b#4!:q c#5!:8 d#4!:q f4:q | b4:q ab4!:q d4:q bb4!:q",
+"db5!:q c5:q a4:h | b4:8 f#4!:qd a#4!:q e4:q | f4:qd bb4!:8 g4:q gb4!:q | d4:q c#5!:8 b4:8 eb4!:h",
+"c#5!:q b4:q g4:q ab4!:q | f4:8 e4:qd c5:q g4:q | r:q f#4!:q eb4!:8 db5!:8 cb5!:q | a4:q d4:q bb4!:h",
+"c#5!:q d5:q g4:qd f#4!:8 | eb4!:h a4:q e4!:q | c4:q ab4!:8 cb5!:8 bb4!:h | d4:q f4:q c5:h",
+"d5:h c5:q ab4!:q | f4:qd bb4!:8 a4:q e4:q | g#4!:q d5:q f#4!:8 e#4!:8 b4:q | c4:q g4:q eb4!:h",
+"c#4!:q d4:q f4:8 eb4!:qd | a4:q b4:q f#4!:q r:q | ab4!:q cb5!:q d4:h | a4:q g4:8 b4:8 c#5!:q d#4!:q",
+"db4!:h f4:q e4:q | g4:q c5:q d5:qd ab4!:8 | r:q c#4!:q d#4!:8 e#4!:q a4:8 | bb4!:q d4:h g#4!:q",
+"c#5!:h b4:q g4:q | f#4!:q a#4!:q d5:qd g4:8 | r:q e4:q ab4!:q db4!:q | bb4!:q gb4!:8 f4:8 c5:h",
+"c#5!:q b4:q a#4!:q f4:q | g4:8 c5:q eb4!:8 r:q a4:q | g#4!:qd d5:8 ab4!:q f4:q | db5!:h g4:q e4:q",
+"db5!:q c5:q a4:8 g4:qd | e4:q f4:q a#4!:h | d4:q f4:8 ab4!:8 cb5!:q bb4!:q | eb4!:q c4:q b4:q gb4!:q",
+"c#4!:q e4:q f4:q a4:q | g#4!:q e4:q bb4!:qd f4:8 | r:q ab4!:q e4:8 db4!:q g4:8 | b4:q d#5!:h b#4!:q",
+"c#4!:q e4:q d#4!:q g#4!:q | c5:h gb4!:q f4:q | e4:q b#4!:q d4:8 a4:8 r:q | db4!:q b4:q g4:qd a#4!:8",
+"c#5!:q a4:q b4:q bb4!:q | g4:q d4:h ab4!:q | fb4!:8 db5!:q b4:8 r:q c5:q | g#4!:qd c4:8 a#4!:h",
+"d5:h bb4!:q g4:q | a4:qd d#4!:8 e4:q ab4!:q | b4:q r:8 d4:8 gb4!:q c4:q | f4:q a#4!:8 d5:8 f#4!:h",
+"c#4!:q f#4!:q g4:qd e4:8 | b4:q f4:q c4:q a#4!:q | r:q g#4!:8 c#5!:8 bb4!:q db4!:q | e4:qd f4:8 d5:h",
+"db4!:q f4:q c5:8 g#4!:qd | a4:q b4:q f4:8 g4:8 r:q | ab4!:q e4:q eb4!:q c#5!:q | d#4!:q b4:q a#4!:qd e4:8",
+"db4!:qd f4:8 a4:q eb4!:q | f4:q d4:8 b4:8 bb4!:q r:q | g4:q b4:q c5:q d#4!:q | a#4!:8 g#4!:qd c#5!:h",
+"c#4!:q b4:q g4:qd ab4!:8 | db5!:q c5:q e4:8 g#4!:qd | r:q f#4!:q g4:8 b4:8 a#4!:q | e4:q d#4!:q f4:h",
+"c#4!:q a4:q f4:q g4:q | e4:8 bb4!:8 r:q d4:qd eb4!:8 | c4:q d4:q b4:q f#4!:q | d#4!:8 f4:qd b4:q ab4!:q",
+"c#4!:h d4:q g#4!:q | a4:qd b4:8 f#4!:q e#4!:q | g4:q d#4!:8 e4:8 ab4!:h | f#4!:q c5:q b4:8 g4:qd",
+"c#4!:q a4:q g4:q f#4!:q | b4:8 g#4!:q d4:8 c5:h | r:q a4:8 c#5!:8 e4:q db4!:q | eb4!:q f4:q ab4!:h",
+"db4!:q f4:q eb4!:h | a4:8 b4:qd a#4!:h | b4:8 d#4!:q e#4!:8 f#4!:q g4:q | ab4!:qd c5:8 d4:h",
+"c#4!:q d4:8 g4:8 e#4!:q f#4!:q | g4:qd b4:8 a#4!:h | f4:q a4:q e4:q c5:q | b4:qd bb4!:8 d4:q ab4!:q",
+"c#4!:q b4:q a4:q f#4!:q | g4:8 e4:q g#4!:8 c5:h | r:q c#5!:8 b4:8 db4!:q f4:q | e4:q g4:q c5:q ab4!:q",
+"c#4!:q a4:q f4:q b4:q | gb4!:q c5:q d5:8 bb4!:qd | d4:q e4:8 ab4!:8 g4:qd f#4!:8 | eb4!:q a4:q f4:h",
+"db4!:q g4:8 a4:8 f4:q c5:q | d#5!:q g#4!:q b#4!:qd c#5!:8 | d5:q e4:q bb4!:q a4:q | g4:qd f#4!:8 b4:h",
+"c#5!:q a4:q bb4!:qd f4:8 | d4:q gb4!:q e4:h | d#4!:q c5:8 b4:8 g4:q e4:q | e#4!:qd a4:8 f#4!:q g4:q",
+"db4!:q e4:q a4:qd g4:8 | c#5!:q e#4!:h f#4!:q | e4:8 d#4!:qd c5:q b4:8 a#4!:8 | g4:q ab4!:q d5:h",
+"c#4!:q d4:q b4:h | a4:qd b4:8 f4:q f#4!:q | g4:q d#4!:8 e4:8 ab4!:h | d4:q c5:q f#4!:8 g#4!:qd",
+"db4!:q eb4!:q c4:8 b3:8 g#4!:q | a4:q f4:q ab4!:h | f#4!:q e4:q a4:8 d5:qd | c#5!:qd g4:8 b4:q eb4!:q",
+"db4!:q c4:q e4:q bb4!:q | eb4!:q c4:h f4:q | e4:8 d5:8 ab4!:q g4:q c#5!:q | f#4!:qd a4:8 b4:q d#4!:q",
+"db4!:q g4:q a4:8 g#4!:8 c#5!:q | e4:qd c5:8 f4:q a4:q | gb4!:q bb4!:q f4:q fb4!:q | eb4!:q a4:q b4:8 d4:qd",
+"db4!:q eb4!:q a4:q ab4!:q | f4:h c#4!:8 g4:qd | e4:8 a4:8 f#4!:q c5:qd b4:8 | db5!:q f4:q b4:q a#4!:q",
+"c#4!:q g4:q b4:q c5:q | a4:q f#4!:8 g#4!:8 e#4!:h | e4:q ab4!:h eb4!:q | bb4!:8 a4:8 d5:q g4:h",
+"c#4!:q f4:q g4:q f#4!:q | a4:8 g#4!:q c4:8 b4:h | r:q g4:8 db5!:8 a4:q eb4!:q | e4:q d5:h bb4!:q",
+"c#4!:q a4:q f4:q g#4!:q | e4:8 g4:q eb4!:8 bb4!:h | gb4!:q ab4!:q c5:8 d#4!:qd | b3:qd e4:8 c4:h",
+"db4!:q f4:8 e4:8 g4:q c5:q | b4:q g#4!:q a#4!:h | eb4!:qd d4:8 a4:q bb4!:q | g4:8 c#4!:qd e4:h",
+"db4!:h f4:q e4:q | bb4!:q a4:q c#5!:h | b4:8 c5:q d#4!:8 e#4!:q f#4!:q | g4:q a4:8 f4:8 g#4!:h",
+"db4!:q g4:q c5:qd b4:8 | g#4!:q a4:8 f4:8 a#4!:h | f#4!:h b4:q d#4!:q | c#5!:qd e4:8 ab4!:h",
+"c#4!:q b3:8 d4:8 ab4!:q g4:q | f#4!:q b4:q a#4!:q r:q | c5:q gb4!:q db5!:qd a4:8 | f4:h b4:h",
+"d5:h c5:q b4:q | db5!:q ab4!:q fb4!:h | eb4!:q g4:8 f#4!:8 e4!:q a#4!:q | f4:qd g4:8 a4:h",
+"d5:q c#5!:q d5:q b4:q | f#4!:q g#4!:q c5:8 bb4!:qd | g4:q c4:8 f4:8 e4:q a#4!:q | db5!:h b4:h",
+"d5:q b4:q c5:q bb4!:q | ab4!:qd g4:8 c#5!:h | e4:q f4:8 a4:8 gb4!:q cb5!:q | db4!:q f#4!:q c4:h",
+"d5:q b4:q a#4!:h | c5:q g4:8 a4:8 bb4!:qd e4:8 | f#4!:q r:q db4!:q ab4!:q | g4:8 c#5!:qd d4:h",
+"d4:h f4:q d#4!:q | f#4!:q e#4!:8 c#5!:8 b4:h | c4:q e4:q g4:8 eb4!:qd | g#4!:qd bb4!:8 a4:q c5:q",
+"d4:q e4:q b4:q a#4!:q | f4:qd c#4!:8 bb4!:q r:q | f#4!:8 g#4!:8 c5:q a4:q d#4!:q | bb4!:q d4:q g4:h",
+"d4:q c4:q f#4!:h | bb4!:q g#4!:8 a4:8 c5:q r:q | c#5!:8 d4:q g4:8 eb4!:h | g4:q db4!:q b4:q a#4!:q",
+"d4:h e4:q ab4!:q | bb4!:qd a4:8 c#5!:h | g4:q f#4!:8 d4:8 r:q eb4!:q | f4:8 a#4!:qd b4:h",
+"d4:h eb4!:q bb4!:q | a4:q e4:8 f4:8 f#4!:h | g4:qd g#4!:8 c#5!:q b#4!:q | d#4!:h c4:h",
+"d4:q db4!:q gb4!:h | e4:8 b4:q f4:8 c5:h | db5!:q eb4!:8 g4:8 r:q ab4!:q | c#5!:h b#4!:q a4:q",
+"d4:h a4:q g#4!:q | eb4!:q c5:8 f4:8 a#4!:h | b4:8 bb4!:qd e4:q f#4!:q | a4:q d4:q c#5!:q g4:q",
+"d4:q g4:q r:q f#4!:q | g#4!:qd c#5!:8 a#4!:q b4:q | f4:q e4:8 db4!:8 a4:h | gb4!:h b4:8 eb4!:qd",
+"d4:q e4:q ab4!:h | f4:q bb4!:8 a4:8 f#4!:q | gb4!:q r:q b4:q d#4!:q | c#5!:qd d4:8 g4:h",
+"d4:q a#4!:q r:q e#4!:q | g#4!:8 f#4!:qd g4!:q bb4!:q | b4:8 c5:q e4:8 db4!:h | f4:q a4:q b3:qd e4:8",
+"d4:h f4:q ab4!:q | c4:qd gb4!:8 e4:h | c#5!:q a4:q eb4!:q g#4!:q | a4:8 bb4!:q f#4!:8 c5:h",
+"d4:q eb4!:q bb4!:q a4:q | c5:q b4:q r:q f4:8 g4:8 | c#4!:q e#4!:q f#4!:h | ab4!:8 g4:qd db4!:q c5:q",
+"d4:q g#4!:q c5:h | b4:qd bb4!:8 gb4!:q c4:q | f4:q a4:8 g4:8 ab4!:h | e4:q f#4!:q d#5!:8 b4:qd",
+"d4:q f4:q e4:q ab4!:q | g4:q b4:q eb4!:h | bb4!:q c5:8 f#4!:8 g#4!:h | d#4!:q a4:q e4:8 c#4!:qd",
+"d4:h g#4!:q e4:q | a4:q gb4!:8 f4:8 ab4!:q r:q | b4:q db4!:q f#4!:q c5:q | a4:8 g4:qd c#4!:q bb4!:q",
+"d5:q b4:q c5:q gb4!:q | b4:qd f#4!:8 eb4!:q r:q | ab4!:qd db4!:8 g4:q e#4!:q | a4:q c#4!:8 d4:8 b4:h",
+"d5:q c#5!:q g4:h | f4:q b4:8 a4:8 eb4!:q r:8 db4!:8 | c4:q f#4!:q e4:qd db5!:8 | bb4!:h ab4!:h",
+"d5:q a4:q bb4!:q gb4!:q | f4:qd f#4!:8 c5:h | b4:q g#4!:8 d#4!:8 e4:8 b#4!:qd | c#5!:h g4:h",
+"d4:q f4:q gb4!:q bb4!:q | f4:8 a4:qd f#4!:q b4:q | c5:q eb4!:h a4:8 ab4!:8 | g4:h d5:q g#4!:q",
+"d4:q g4:q e4:qd a4:8 | gb4!:h ab4!:q c5:q | db5!:q b4:q c#5!:8 d#4!:8 e#4!:q | b4:qd a4:8 bb4!:h",
+"d5:q bb4!:q a4:q c#5!:q | g#4!:q f4:h c5:8 b4:8 | fb4!:q d5:q ab4!:8 e4:qd | db4!:q b4:q f4:h",
+"d4:q e4:q a4:q f#4!:q | c#5!:8 g4:qd eb4!:q b4:q | r:q a#4!:q c5:8 bb4!:8 d4:q | c4:q b4:h gb4!:q",
+"d5:q bb4!:q c5:8 g#4!:qd | a4:h eb4!:q f#4!:q | b4:8 e#4!:q d5:8 c#5!:q f4:q | e4:q ab4!:q b4:q c4:q",
+"d4:q e4:q a4:q g#4!:q | d5:qd a#4!:8 d#4!:q f4:q | e4:8 c#5!:8 b#4!:h g4:q | db4!:q c5:q f#4!:h",
+"d5:q bb4!:q ab4!:8 g4:qd | f4:q d4:q g#4!:q c5:q | r:q d5:8 b4:8 e#4!:q a4:q | c5:q f#4!:h d#5!:q",
+"d4:q gb4!:q f4:q bb4!:q | a4:8 c#5!:qd g4:q d#5!:q | r:q eb4!:h d4:q | c5:8 b4:8 e4:q a#4!:q f4:q",
+"d4:q f#4!:q a#4!:qd g4:8 | d5:q ab4!:q b4:h | r:q eb4!:q c4:8 bb4!:qd | c5:h db4!:8 a4:8 f4:q",
+"d4:h e4:q g#4!:q | d#4!:q a4:q c5:8 bb4!:qd | r:q eb4!:q f#4!:q a#4!:q | c4:8 g4:8 db5!:q b4:h",
+"d5:q g4:q a#4!:h | f#4!:8 b4:q db4!:8 a4:q gb4!:q | r:q f4:q b4:8 d#5!:qd | e4:h c5:q g#4!:q",
+"d4:q g4:q ab4!:q e4:q | eb4!:qd bb4!:8 d5:h | c5:q e#4!:q d4:8 g#4!:8 f4:q | c#5!:h a4:h",
+"d4:q f#4!:q e#4!:8 b4:qd | c5:h ab4!:h | e4:8 g#4!:8 a4:q db5!:q b4:q | g4:q eb4!:q c#5!:h",
+"d4:q f4:q eb4!:q g4:q | b4:qd a4:8 d5:q a#4!:q | b#4!:h e4:q c#4!:q | f#4!:8 d#5!:q c5:8 db4!:h",
+"d5:q c#5!:q a#4!:qd b4:8 | e4:q ab4!:q g4:q db5!:q | cb5!:q d4:q c4:8 g#4!:qd | b4:q d#4!:8 f4:8 a4:h",
+"d4:q f4:q c#5!:qd a#4!:8 | b4:q d#4!:h e#4!:q | f#4!:q r:8 c5:8 a4:q g4:q | f4:8 eb4!:q d5:8 ab4!:h",
+"d4:q bb4!:q e4:q g4:q | f#4!:q e#4!:8 c5:8 a4:h | d4:h eb4!:q a4:8 f4:qd | d4:h g4:h",
+"d4:8 e4:8 b4:q c#5!:q g4:q | eb4!:qd db4!:q f4:q | r:q a4:q g4:q bb4!:q | c4:8 a#4!:qd g4:q f#4!:q",
+"d4:qd bb4!:8 c5:q f4:q | g4:q f#4!:q e#4!:q g#4!:q | r:q f4:q c5:8 eb4!:q a4:8 | g4:8 e4:qd d#4!:q b4:q",
+"d4:q g4:q ab4!:q eb4!:q | f4:q c#5!:q g4:8 a4:qd | r:q f#4!:q g#4!:8 c5:8 e4:q | d#4!:qd a4:8 f4:q b4:q",
+"d4:q b4:q f#4!:qd g4:8 | bb4!:q a4:q e4:q c5:q | c#5!:8 d#4!:q f4:8 ab4!:h | d4:8 eb4!:qd b4:q a#4!:q",
+"d4:q eb4!:q gb4!:q f4:q | a4:8 b4:8 db4!:q c5:8 g4:qd | e4:h f#4!:qd b4:8 | c#5!:q a4:q g#4!:q b4:q",
+"d4:q f4:q b4:8 a#4!:qd | d5:q a4:q bb4!:q gb4!:q | ab4!:q g4:q r:q e4:8 c#5!:8 | d#4!:h c5:qd g#4!:8",
+"d4:q g4:q e4:qd f#4!:8 | eb4!:q f4:8 bb4!:8 c5:h | c#5!:q g#4!:q bb4!:q a4:q | b4:qd c5:8 g4:q db4!:q",
+"d4:q g4:q bb4!:q e4:q | a4:8 f#4!:8 b4:q g#4!:8 c5:qd | d4:q eb4!:q db5!:q b4:q | a4:qd f4:8 c#5!:h",
+"d4:q b4:q f#4!:8 e#4!:q g4:8 | a4:q d5:q g4:8 eb4!:qd | r:q ab4!:q e4:q c5:q | g#4!:qd a4:8 b4:h",
+"d4:q f#4!:q f4!:q a4:q | e4:qd g#4!:8 d#4!:h | c4:8 d4:q a#4!:8 g4:q b4:q | eb4!:qd f4:8 fb4!:h",
+"d4:8 a4:q g4:8 c5:q b4:q | ab4!:q d5:q e4:h | f4:qd eb4!:8 c#5!:q b#4!:q | a#4!:q f#4!:q b4:h",
+"d4:q g4:q ab4!:8 e4:8 f4:q | eb4!:qd gb4!:8 c5:h | a4:q c#5!:q d#4!:8 e#4!:qd | d4:q a#4!:q g4:h",
+"d4:q e4:q f4:8 b4:qd | c4:q db4!:q g4:q eb4!:q | f#4!:q bb4!:8 a4:8 c5:q g4:q | b4:qd c#5!:8 a#4!:h",
+"d4:q c4:q g4:q f#4!:q | g#4!:qd c#5!:8 a4:q b4:q | e4:q f4:h eb4!:8 bb4!:8 | a4:q g#4!:q b4:8 db4!:qd",
+"d4:q g4:q a4:q gb4!:q | eb4!:qd db5!:8 f4:q bb4!:q | r:q b4:q c#5!:8 f4:8 e4:q | d#4!:q a4:q b4:8 ab4!:qd",
+"d4:q a4:q g4:qd g#4!:8 | c#5!:q eb4!:q b4:h | f#4!:q e#4!:q c5:8 bb4!:qd | r:q c4:8 ab4!:8 e4:q g4:q",
+"d4:q eb4!:q c5:q d#4!:q | e4:h a#4!:h | r:q f4:8 b4:8 g#4!:qd c5:8 | ab4!:q g4:q bb4!:q f#4!:q",
+"d4:q bb4!:q a4:q c#5!:q | c5:8 b4:qd f4:q eb4!:q | f#4!:8 e4:q g#4!:8 g4!:h | c5:q ab4!:q f4:qd b4:8",
+"d4:q g4:q c#5!:q b4:q | a4:q db5!:q ab4!:qd gb4!:8 | f4:h b4:q d4:8 eb4!:8 | c5:8 bb4!:qd f#4!:q c4:q",
+"d4:q f4:8 e4:8 ab4!:q b4:q | db4!:q a4:q g#4!:q b4:q | c5:h eb4!:8 c#5!:qd | a4:qd e4:8 g4:q f#4!:q",
+"eb4!:q f4:q a4:q ab4!:q | b4:qd c5:8 e#4!:h | g4:8 d#4!:q g#4!:8 d5:q c#5!:q | e4:h f#4!:h",
+"d#4!:h b3:q e#4!:q | d4:q a#4!:q f4:8 g4:qd | ab4!:q c5:8 bb4!:8 e4:q db4!:q | a4:h f#4!:h",
+"d#4!:q e4:q g4:q c5:q | a#4!:qd b4:8 g#4!:h | f4:8 db4!:q a4:8 f#4!:h | r:q eb4!:q c#5!:q a4:q",
+"eb4!:q c4:q g4:q f#4!:q | d4:8 e4:q a4:8 e#4!:h | r:q bb4!:q c#5!:q f4:8 g#4!:8 | d#5!:h b4:h",
+"d#4!:q b3:q f#4!:q c5:q | b4:qd db5!:8 a4:q r:q | e4:q c#5!:q bb4!:qd ab4!:8 | d5:q g4:8 f4:8 b4:h",
+"eb4!:q a4:q g4:q f#4!:q | d4:q c#4!:8 b4:8 a#4!:h | g4:q ab4!:q cb4!:q e4:q | e#4!:qd c5:8 f4:h",
+"eb4!:q d4:q bb4!:q f4:q | b4:8 g4:q e4:8 a#4!:h | e#4!:q b4:q d5:q bb4!:q | a4:q g#4!:q c4:8 e4:qd",
+"d#4!:q a4:q e4:h | f4:8 eb4!:q c5:8 g#4!:q r:q | b#3!:q a4:q b4:8 bb4!:qd | g4:qd f#4!:8 c#4!:h",
+"eb4!:q a4:q g4:q b4:q | c#5!:q d4:q f#4!:8 c4:qd | r:q a4:8 f4:8 bb4!:qd g4:8 | db5!:q e4:q a#4!:h",
+"eb4!:h f4:q a4:q | g#4!:qd a#4!:8 c5:q b4:q | r:q bb4!:8 ab4!:8 f4:q d4:q | b#4!:q g4:q c#5!:h",
+"d#4!:h g4:q c#4!:q | b4:8 c5:qd f#4!:q g#4!:q | r:q e4:8 f4:8 a4:q ab4!:q | cb5!:qd d4:8 bb4!:q g4:q",
+"eb4!:q d4:q g#4!:h | c4:8 b3:q e#4!:8 a4:q f4:q | a#4!:qd g4:8 c5:q b4:q | ab4!:8 e4:qd d#4!:h",
+"d#4!:q f#4!:q b4:q g4:q | c5:qd c#5!:8 b#4!:q f4:q | r:q g#4!:q a4:8 e4:8 b4:q | d5:q eb5!:q g4:8 e4:qd",
+"d#4!:q e4:q ab4!:q c5:q | b4:q a4:8 g4:8 c#5!:q r:q | bb4!:q f4:8 a4:8 eb4!:h | c5:q g#4!:q d5:q a#4!:q",
+"eb4!:h a4:q bb4!:q | e4:8 g#4!:qd d5:q a#4!:q | f4:8 b4:q f#4!:8 g4:h | c#4!:q a4:q d#4!:h",
+"eb4!:q a4:q f4:qd gb4!:8 | ab4!:q g4:8 eb4!:8 d5:q r:q | c5:qd f#4!:8 bb4!:q a4:q | d4:q b4:q fb4!:h",
+"eb4!:q d4:q g4:qd c5:8 | a#4!:q f4:q gb4!:h | a4:q db5!:q b4:8 c#4!:8 a4:q | g4:qd e4:8 f#4!:h",
+"d#4!:q e4:q a4:q g#4!:q | f4:qd ab4!:8 b4:q f#4!:q | c4:q f4:8 eb4!:8 d5:h | bb4!:qd c#5!:8 g4:h",
+"d#4!:q g4:q ab4!:q f4:q | e4:8 g#4!:qd b4:q c4:q | r:q d4:8 eb4!:8 a4:q bb4!:q | g4:qd d5:8 c#5!:q e#4!:q",
+"d#5!:q b4:q c5:q g4:q | a4:q f4:8 e4:8 ab4!:h | f#4!:8 g#4!:q db4!:8 c5:q a#4!:q | d4:h g4:h",
+"d#4!:q a#4!:q b4:h | c5:8 g4:8 f#4!:q bb4!:q r:8 a4:8 | db4!:q g4:q f4:8 eb4!:qd | d5:h ab4!:h",
+"d#5!:h a4:q g4:q | f#4!:h c5:8 b4:qd | db4!:q a4:8 f4:8 bb4!:q gb4!:q | d5:h eb4!:h",
+"d#4!:h e4:q a4:q | d4:q g#4!:q c5:qd ab4!:8 | e4:q c#5!:q f#4!:8 e#4!:8 c4:q | b4:q a#4!:q g4:h",
+"eb4!:q c5:q b4:q db5!:q | a4:q g4:q c5:qd f#4!:8 | e#4!:q r:q d5:q ab4!:q | bb4!:8 g4:8 f4:h",
+"eb4!:q g4:q f#4!:q c4:q | d#4!:q a4:q r:q b4:q | db5!:8 cb5!:qd e4:q ab4!:q | f4:q eb4!:8 d5:8 a4:h",
+"d#5!:q c#5!:q b4:q g4:q | a4:q eb4!:q f4:h | bb4!:qd cb5!:8 e4:q db4!:q | d4:8 c4:q b4:8 fb4!:h",
+"eb5!:q db5!:q b4:q c5:q | gb4!:q r:q e4:qd c#5!:8 | b#4!:q g4:q f#4!:8 d5:q a#4!:8 | e4:q a4:q f4:h",
+"d#4!:q e4:q g4:q f#4!:q | b4:qd f4:8 c5:h | e#4!:q g#4!:q d4:8 bb4!:q c#5!:8 | d5:q a#4!:q c5:8 b4:qd",
+"eb5!:h c5:q d5:q | a4:q b4:q f#4!:qd ab4!:8 | e4:q b#4!:q r:q d#4!:q | f4:8 c#4!:8 d4:q bb4!:q g4:q",
+"eb4!:q g4:q f#4!:h | a#4!:q c5:q db5!:qd g4:8 | a4:q r:q d4:8 ab4!:8 f4:q | c#5!:q b4:q e4:q gb4!:q",
+"d#4!:h e4:q g4:q | f#4!:q bb4!:q d5:q ab4!:q | b4:8 c#4!:qd e#4!:q c5:q | gb4!:q r:q f4:8 c5:q a4:8",
+"eb4!:q c4:q f4:q a4:q | b4:h g4:q c#5!:q | b#4!:qd d5:8 f#4!:q g#4!:q | c4:8 e4:q db4!:8 b4:q ab4!:q",
+"d#5!:q b4:q a4:q c5:q | ab4!:qd e4:8 g4:q f#4!:q | e#4!:q c5:q bb4!:8 d4:qd | eb4!:8 c#4!:8 b4:q g4:h",
+"eb5!:q c5:q a4:q a#4!:q | d5:8 f4:qd gb4!:q bb4!:q | r:q ab4!:q c4:8 b3:8 g4:q | e4:qd db5!:8 cb5!:q g4:q",
+"eb5!:q c5:q b4:q d#5!:q | g4:qd c5:8 f4:q db4!:q | cb5!:8 bb4!:qd e4:q ab4!:q | f4:q d5:8 a4:8 f#4!:h",
+"eb5!:q d5:q b4:q a#4!:q | f#4!:q bb4!:q e4:h | d4:8 c4:q b4:8 g#4!:q a4:q | d#4!:q f4:q c#5!:qd g4:8",
+"eb4!:q d4:q g4:8 a4:8 ab4!:q | c5:q b4:q d#4!:h | f4:8 e4:q f#4!:8 d4:q a#4!:q | g4:q f4:q b4:q c#5!:q",
+"d#4!:q g4:q f#4!:q c5:q | b4:h e#4!:h | g4:q f4:q bb4!:qd a4:8 | b#4!:q c#5!:q d5:8 e4:8 ab4!:q",
+"eb4!:q c4:q a4:q g4:q | a#4!:q f#4!:q b#4!:h | f4:q e4:q gb4!:8 d5:qd | c#5!:qd a4:8 b4:h",
+"eb4!:q g4:q c5:qd b4:8 | g#4!:q a4:8 bb4!:8 f4:q r:q | f#4!:h a4:q d#4!:q | c#5!:8 e4:qd d4:h",
+"eb4!:q f4:8 g4:8 b4:q db4!:q | e4:q g4:q d#4!:qd a4:8 | gb4!:q bb4!:q c5:q eb4!:q | a4:q g#4!:q d4:8 e4:qd",
+"eb4!:q g4:8 f#4!:8 b4:q c5:q | c#5!:q d5:q e#4!:q g#4!:q | a4:q e4:q d4:8 a#4!:q b4:8 | f4:q g4:q db5!:h",
+"d#4!:q e4:q f4:q a4:q | g#4!:qd b4:8 c#4!:h | d4:8 g4:q a4:8 db4!:q c5:q | a#4!:qd c4:8 f#4!:h",
+"d#4!:q a4:q g4:8 ab4!:8 e4:q | g4:q b4:q f#4!:q r:q | c#5!:q g#4!:8 a4:8 d5:q f4:q | gb4!:q d4:q a#4!:h",
+"d#4!:q g4:8 a4:8 f4:q e4:q | f#4!:q eb4!:q c#5!:q g4:q | c5:q a4:q b4:8 bb4!:qd | g4:qd g#4!:8 e4:q d4:q",
+"d#4!:q b4:q g#4!:q a4:q | g4:8 e4:q c#5!:8 a#4!:h | c5:q db5!:q r:q e4:8 ab4!:8 | f4:q d5:q gb4!:h",
+"eb4!:q ab4!:q f4:q b4:8 a4!:8 | c5:q d4:q f#4!:8 g4:qd | r:q a4:q f4:q g#4!:q | d#4!:q g4:q c#5!:qd e4:8",
+"d#4!:q e4:q g4:8 c#4!:q a4:8 | b4:q c5:q gb4!:q r:q | db4!:q g4:8 a#4!:8 b4:q f#4!:q | g#4!:q d4:q e4:q c4:q",
+"eb4!:qd ab4!:8 g4:q b4:q | d5:q c5:q f#4!:8 a#4!:qd | r:q b4:q f4:8 e4:8 g#4!:q | a4:q db5!:q c5:h",
+"d#4!:q a4:q b4:qd g#4!:8 | e4:8 g4:q f4:8 b4:h | gb4!:8 ab4!:qd c5:q db4!:q | f4:q e4:q a#4!:h",
+"d#4!:q b4:q bb4!:qd f#4!:8 | g4:q e4:q c#5!:h | g4:8 a4:qd c5:q db4!:q | f4:q eb4!:8 a4:8 d4:h",
+"eb4!:q d4:q c5:q f#4!:q | e#4!:q g#4!:q bb4!:8 a4:qd | g4:h db5!:q f4:8 g4:8 | b4:qd c#4!:8 e4:h",
+"eb4!:q ab4!:q g4:q c5:8 b4:8 | a4:q bb4!:q f4:h | g4:qd e4:8 c#5!:q b#4!:q | d4:q f#4!:q g#4!:h",
+"d#4!:q e4:q c4:q ab4!:q | g4:qd c5:8 b4:q g#4!:q | e4:q f#4!:h eb4!:8 bb4!:8 | db4!:qd g4:8 f4:h",
+"eb4!:q f4:q d4:8 b4:qd | ab4!:qd d5:8 c5:q g4:q | r:q f#4!:8 b4:8 a4:q d#4!:q | e4:q g#4!:q a#4!:h",
+"d#4!:q c4:q a4:qd g4:8 | b#4!:q c#5!:q d4:q eb4!:q | f4:h g4:8 db5!:8 b4:q | e4:q bb4!:q f#4!:h",
+"d#4!:q g#4!:q a4:q ab4!:q | f4:q bb4!:8 a4:8 e4:qd db4!:8 | c4:q g4:q e4:8 b4:qd | gb4!:q d5:q a4:h",
+"d#4!:q b4:q c5:q bb4!:q | a4:qd db5!:8 g4:q e#4!:q | f#4!:q a4:8 c4:8 eb4!:h | e4:8 d5:qd g4:q ab4!:q",
+"eb4!:q c5:q b4:q ab4!:q | g4:q f#4!:8 b4:8 g#4!:h | d4:q e4:q g4:qd c#4!:8 | f4:q db5!:q a4:h",
+"eb4!:q d4:8 g4:8 a4:q ab4!:q | c5:q b4:q d#4!:h | f4:q e4:q f#4!:8 d4:q a#4!:8 | c#5!:q g4:q d5:h",
+"eb4!:q a4:q f#4!:q g4:q | g#4!:q c5:q b4:qd e4:8 | c#4!:q b#3!:q f4:8 ab4!:qd | gb4!:8 d5:q a4:8 b4:h",
+"e4:q g4:q a4:q ab4!:q | d4:q c#4!:8 a#4!:8 b4:q r:q | c5:8 f4:q eb4!:8 bb4!:q cb5!:q | gb4!:h c4:h",
+"e4:q d4:q a4:q a#4!:q | b4:8 f4:q db4!:8 g4:qd c5:8 | c#5!:q r:q f#4!:q eb4!:q | cb5!:h ab4!:h",
+"e4:q c#4!:q d#4!:q a4:q | b4:q c5:8 g#4!:8 d5:q r:8 a#4!:8 | f4:qd g4:8 eb4!:q fb4!:q | db4!:h c4:h",
+"e4:h f4:q c#4!:q | g4:qd db4!:8 b3:q r:q | c4:q a#4!:q f#4!:8 g4:8 d#5!:q | d4:q ab4!:q e4:h",
+"e4:q f4:q c5:q b4:q | db4!:h cb4!:h | eb4!:q g4:8 f#4!:8 bb4!:q a4:q | g#4!:8 d5:qd c#5!:h",
+"e4:q f4:q eb4!:q g4:q | c#4!:q d4:q g#4!:qd c5:8 | a#4!:q r:q d#5!:8 g4:8 b4:q | db4!:8 gb4!:qd f4:q a4:q",
+"e4:h f#4!:q b4:q | g4:8 db5!:qd c5:q a#4!:q | r:q f4:8 c#5!:8 eb4!:q g4:q | f4:q bb4!:q d4:q g#4!:q",
+"e4:q a4:q g#4!:q d5:q | f4:q db4!:8 e4:8 cb4!:h | b4:q a#4!:q g4:q d#4!:q | c5:q b4:8 c#5!:8 f#4!:h",
+"e4:q eb4!:q g4:q ab4!:q | b4:q f4:q c#5!:h | r:q d4:q b4:8 f#4!:8 a4:q | e#4!:qd c5:8 d#4!:h",
+"e4:q g4:q c5:q a#4!:q | b4:q eb4!:8 ab4!:8 d4:h | g4:q f4:q b#3!:h | r:q c#4!:q b4:q d5:8 gb4!:8",
+"e4:q b4:q g#4!:h | c5:q gb4!:q d4:qd c4:8 | f4:q r:q d#4!:q a4:8 bb4!:8 | g4:q eb5!:q bb4!:8 db4!:qd",
+"e4:q d4:q ab4!:q gb4!:q | f4:8 b4:qd g4:q c#4!:q | r:q f#4!:q b4:q c5:8 bb4!:8 | d4:q b4:q c#5!:q eb4!:q",
+"e4:q f#4!:q b4:q eb4!:q | a4:q g#4!:8 c5:8 d4:q r:q | a#4!:h c#4!:q g4:q | d5:8 ab4!:qd f4:q bb4!:q",
+"e4:q a4:q db4!:h | f4:q g4:8 c5:8 bb4!:h | ab4!:q cb4!:q d4:8 gb4!:qd | a4:qd f4:8 b4:q f#4!:q",
+"e4:q b4:q f#4!:q g4:q | db4!:q f4:q a4:8 g#4!:qd | c#4!:8 f4:q d4:8 eb4!:h | a4:q b#4!:q g4:q a#4!:q",
+"e4:q f4:q a#4!:q b4:q | f#4!:q b#4!:q g#4!:8 d4:qd | a4:q bb4!:8 c4:8 g4:h | e4:q ab4!:q d5:q gb4!:q",
+"e4:q b4:q g4:q ab4!:q | c5:q eb4!:q fb4!:h | g4:q f4:q d5:8 c#5!:8 r:q | d#4!:qd g4:8 f4:q a#4!:q",
+"e4:q eb4!:q a4:q g#4!:q | d4:qd ab4!:8 b4:q c4:q | r:q f#4!:q c5:q g4:8 e4:8 | b#4!:q c#5!:q f4:8 a4:qd",
+"e4:q f4:q a#4!:q d4:q | eb4!:q c5:8 bb4!:8 f#4!:q r:q | g4:h b4:q c#4!:q | f4:8 d#4!:qd g4:q a4:q",
+"e4:q g4:q db4!:q c4:q | g#4!:q f4:q b#3!:h | a4:8 d5:qd bb4!:q f#4!:q | eb4!:q f4:8 b4:8 c#5!:h",
+"e4:q f4:q g#4!:qd c4:8 | bb4!:q r:q g4:q d4:q | a4:8 eb4!:q d4:8 cb4!:q gb4!:q | f4:q b4:q c#4!:h",
+"e4:qd f4:8 a4:q eb4!:q | db5!:q ab4!:8 g4:8 e4:h | f4:q d5:q g#4!:q d#4!:q | r:q bb4!:q a4:q b#4!:q",
+"e4:q g4:q a#4!:q c#4!:q | d#4!:qd c4:8 f4:q g4:q | f#4!:8 d4:q ab4!:8 b4:q r:q | b#4!:h d4:8 g#4!:qd",
+"e4:h c#4!:q eb4!:q | c4:q d4:q a4:qd g#4!:8 | b#4!:h f#4!:q d#5!:q | a#4!:q r:q f4:8 g4:8 b4:q",
+"e4:q d#4!:q f4:qd b4:8 | a4:h gb4!:8 f4:8 ab4!:q | d4:q a#4!:q c4:8 g#4!:qd | c5:q r:q e#4!:q g4:q",
+"e4:h f#4!:q a#4!:q | g4:8 db4!:qd ab4!:q c5:q | g#4!:q d5:q b#4!:8 d4:qd | f4:8 bb4!:q c4:8 a4:h",
+"e4:q g#4!:q f#4!:qd b4:8 | ab4!:q c#5!:8 d5:8 g4:h | b4:q d#4!:q c5:q f4:q | r:8 cb5!:8 f4:q b4:q a#4!:q",
+"e4:q d#4!:q g4:q f#4!:q | a4:8 e4:q bb4!:8 gb4!:h | b4:q a4:q d4:8 c#5!:qd | r:q e4:q b#3!:q g#4!:q",
+"e4:h c4:q f#4!:q | a4:q g#4!:q b#4!:q r:q | e4:q b4:q ab4!:8 d4:8 gb4!:q | e4:qd c5:8 d#4!:h",
+"e4:q f#4!:q d#4!:qd g4:8 | ab4!:q f4:q c#5!:8 b4:8 r:q | bb4!:q a4:q eb4!:q d4:q | c5:h e#4!:h",
+"e4:q gb4!:q b4:q a4:q | db4!:q f4:q c5:8 eb4!:qd | f#4!:8 e#4!:q g4:8 c#5!:h | ab4!:qd d4:8 f4:q b4:q",
+"e4:q a4:q g#4!:qd c5:8 | b4:q eb4!:8 c#5!:8 g4:q r:q | f#4!:qd db4!:8 e4:q a4:q | d5:h c#5!:q e#4!:q",
+"e4:q a4:q f4:q cb4!:q | d4:qd bb4!:8 g4:h | eb4!:q c5:8 g#4!:8 r:q d#4!:q | c#4!:qd b4:8 e4:q ab4!:q",
+"e4:q f4:q d4:8 ab4!:8 g4:q | c#5!:q g#4!:q r:q a4:q | bb4!:qd db4!:8 a4:q g4:q | eb4!:q c4:q b4:h",
+"e4:q f#4!:8 b4:8 g4:q c4:q | d#4!:qd e4:8 a4:h | bb4!:q d4:q e#4!:8 c#4!:qd | a4:h c5:q db4!:q",
+"e4:q eb4!:q f4:8 a4:q g#4!:8 | b4:q g4:q ab4!:8 d4:qd | r:q b#3!:q a4:qd f#4!:8 | c5:q d#4!:q c#5!:h",
+"e4:q c4:q eb4!:qd bb4!:8 | g4:q f#4!:h b#3!:q | f4:q d5:8 c5:8 b4:q g#4!:q | a#4!:h c#4!:h",
+"e4:q eb4!:q c4:q g#4!:q | f4:q ab4!:q b4:q d4:q | r:q b#4!:q g4:8 a4:8 f#4!:q | db4!:q c5:h g4:8 a#4!:8",
+"e4:q ab4!:q c5:qd b4:8 | bb4!:q d#5!:8 g4:8 f#4!:h | a4:q b4:q g#4!:q e#4!:q | d5:h c#5!:h",
+"e4:qd g4:8 ab4!:q b4:q | g4:8 db4!:q f4:8 bb3!:h | r:q f#4!:q d4:q c5:q | e#4!:qd d#4!:8 g#4!:q a4:q",
+"e4:q f4:q c5:8 eb4!:q db4!:8 | c4:q d4:q g#4!:h | bb4!:q f#4!:q g4:8 b4!:qd | c#4!:q a4:q f4:h",
+"e4:q b4:q a4:qd d4:8 | g#4!:q c4:q bb4!:8 a4:qd | f4:q e4:q g4:8 c#5!:q ab4!:8 | cb5!:q eb4!:q d4:q f#4!:q",
+"e4:h f4:q b4:q | g4:8 db4!:qd c5:q a4:q | eb4!:q c#5!:8 d5:8 b4:q g#4!:q | f#4!:q bb4!:q d4:h",
+"e4:q d4:q g4:8 g#4!:8 c5:q | f#4!:qd c#4!:8 e4:q b4:q | bb4!:q a4:q c5:8 gb4!:qd | eb5!:q f4:q b#4!:h",
+"e4:q b4:q eb4!:q f4:q | c#4!:q a4:q g#4!:qd f#4!:8 | b4:q g4:q db4!:8 c5:qd | f4:8 e4:q bb4!:8 ab4!:h",
+"e4:q eb4!:8 bb4!:8 a4:q ab4!:q | b4:q f4:q c5:8 d4:qd | g4:q e#4!:q f#4!:q c#5!:q | a4:qd c5:8 b4:h",
+"e4:q f#4!:8 b4:8 g#4!:q c4:q | g4:h db4!:h | e4:q f4:q eb4!:8 bb4!:qd | a4:q c#5!:q d4:h",
+"e4:q g4:q c#5!:qd f4:8 | a4:q bb4!:q ab4!:q e4:q | g4:8 d4:q f#4!:8 b#3!:h | c#4!:q eb4!:q d5:8 b4:qd",
+"e4:qd g4:8 c#5!:q b#4!:q | d5:q a4:h bb4!:q | f#4!:q d4:q c5:q g4:8 g#4!:8 | b4:h d#4!:h",
+"e4:q f4:q a4:q eb4!:q | db4!:qd c4:8 ab4!:h | g4:q d#5!:q c5:qd f#4!:8 | a4:8 a#4!:q d4:8 g#4!:h",
+"e4:q b4:q f#4!:qd g4:8 | bb4!:q ab4!:q f4:8 c5:8 r:q | c#5!:q d4:q a4:q eb4!:q | db4!:8 e4:qd b4:q a#4!:q",
+"e4:q cb4!:q f4:8 f#4!:qd | ab4!:q b4:q g4:h | c5:q db5!:q r:q a4:8 d#4!:8 | f4:qd g4:8 d5:q eb4!:q",
+"e4:q f4:8 c5:8 a4:q db4!:q | c4:q d4:q g#4!:qd a4:8 | bb4!:q f#4!:q g4:q d#5!:q | b4:8 c#4!:qd ab4!:h",
+"e4:q g4:q g#4!:8 c4:qd | b4:q eb4!:8 c#5!:8 d4:q r:q | f4:q bb4!:q a4:q f#4!:q | ab4!:qd e4:8 f4:q c#4!:q",
+"e4:q f4:q d4:qd eb4!:8 | c5:q f#4!:q b4:h | r:q g#4!:8 d#4!:8 f4:q e4:q | a#4!:q g4:q a4!:q c#4!:q",
+"e4:q a4:q b4:qd bb4!:8 | f4:q eb4!:q g4:q r:q | c4:h c#4!:q d4:8 g#4!:8 | b4:8 e4:qd f#4!:q e#4!:q",
+"e4:q c5:q a4:8 bb4!:8 gb4!:q | d4:qd f4:8 b4:q f#4!:q | r:q g4:q d#4!:q b4:q | eb4!:8 d5:qd f4:q c#4!:q",
+"e4:q f#4!:q eb4!:qd c5:8 | a4:8 f4:q ab4!:8 d4:q c#4!:q | g4:h db4!:qd b4:8 | r:q bb4!:q f4:q g#4!:q",
+"e4:q c4:q db4!:q g4:q | a4:h f4:8 gb4!:q e4:8 | a#4!:qd b4:8 eb5!:q d5:q | a4:8 bb4!:qd g4:q f#4!:q",
+"e4:q g#4!:q f4:q | b4:q eb4!:q a4:h | bb4!:q ab4!:q f4:8 f#4!:qd | d4:q e#4!:q c5:qd g4:8",
+"e4:q g4:q f#4!:q b4:q | c5:q eb4!:q bb4!:8 a4:qd | g4:q d#5!:q b#4!:qd f4:8 | ab4!:8 e4:8 d5:q g#4!:h",
+"f4:q gb4!:q ab4!:q c5:q | a4:q f4:8 c#4!:8 e4:q r:8 g#4!:8 | a#4!:q d5:q b4:qd db4!:8 | f4:q e4:q a4:h",
+"f4:q db4!:q eb4!:q a4:q | db5!:h c5:8 f#4!:qd | r:q g4:8 g#4!:8 e4:q b4:q | d5:q bb4!:q gb4!:h",
+"f4:q a4:q g#4!:h | d4:q eb4!:q b4:qd c5:8 | db5!:q r:q ab4!:8 bb4!:8 g4:q | f#4!:qd a#4!:8 e4:h",
+"f4:q eb4!:q d4:q f#4!:q | c4:qd bb4!:8 ab4!:h | r:q c#5!:8 b4:8 db4!:q fb4!:q | a4:h g4:h",
+"f4:q c4:q db4!:q g4:q | e4:qd ab4!:8 cb4!:h | d4:8 eb4!:8 b4:q a#4!:q c#5!:q | d5:h a4:h",
+"f4:h e4:q g#4!:q | d4:q ab4!:q c5:h | r:q c#5!:8 f4:8 gb4!:q d4:8 eb4!:8 | b3:q e#4!:q a4:q b4:q",
+"f4:q bb4!:q g4:h | c#5!:q b4:8 e4:8 a#4!:h | d#4!:q g4:q c5:q a4:q | ab4!:q b4:8 eb4!:8",
+"f4:q g4:q eb4!:q a4:q | c#4!:qd f#4!:8 b4:h | ab4!:8 d4:qd bb4!:q a4!:8 c5:8 | d#4!:h f4:h",
+"f4:q g#4!:q a4:q c#5!:q | g4:qd b4:8 e#4!:q a#4!:q | r:q g4:8 c5:8 e4:q gb4!:q | eb4!:q d4:q b4:8 f#4!:qd",
+"f4:q ab4!:q g4:q c5:q | db5!:8 bb4!:8 g4:q f#4!:h | r:q e#4!:q b4:q d#4!:q | d4:qd g#4!:8 c4:h",
+"f4:q a#4!:q d5:q g#4!:q | r:q e4:q b4:8 db4!:qd | bb4!:8 g4:q d#5!:8 a4:h | f4:qd g4:8 gb4!:q c4:q",
+"f4:q b4:q c5:q gb4!:q | eb4!:q d4:q g#4!:q r:q | b4:h a4:q e4:8 ab4!:8 | d4:qd c#5!:8 f4:q e4:q",
+"f4:q d#4!:q g4:q c#5!:q | r:q eb4!:q a4:qd bb4!:8 | cb5!:h g4:q g#4!:8 d5:8 | e4:q b4:q c5:h",
+"f4:q c5:q a4:q bb4!:q | g4:qd e4:8 ab4!:h | d4:q eb4!:8 a4:8 c#5!:h | g#4!:qd a4:8 b#3!:q e4:q",
+"f4:q d4:q g#4!:h | b4:q a#4!:8 f#4!:8 c5:h | ab4!:qd db4!:8 eb4!:q g4:q | c#5!:q b4:q e4:8 a4:qd",
+"f4:q b4:q ab4!:q c5:q | g4:qd eb4!:8 c#5!:q d5:q | e#4!:h b4:q f#4!:8 a4:8 | bb4!:q e4:q g#4!:h",
+"f4:q f#4!:q a4:q d#4!:q | g4:h e4:qd b4:8 | db4!:q g4:q cb5!:q bb4!:q | c#5!:8 d5:8 eb5!:q a4:h",
+"f4:q b4:q eb4!:q a4:q | d5:h g4:8 c#5!:qd | r:q e4:q f#4!:8 g#4!:q e#4!:8 | d#4!:q b4:q c5:q a4:q",
+"f4:h d#4!:q e4:q | b4:qd c5:8 eb4!:h | f#4!:8 a4:q bb4!:8 g4:q c#5!:q | g#4!:h d4:h",
+"f4:h e4:q b4:q | a4:q c#5!:q bb4!:8 d5:qd | r:q f#4!:8 g4:8 c5:q ab4!:q | d#4!:qd e4:8 g#4!:h",
+"f4:qd a4:8 g#4!:q c#5!:q | b4:q d#4!:h f#4!:q | g4:q r:q fb4!:8 b4:8 a#4!:q | c5:8 e4:qd d5:q ab4!:q",
+"f4:q a4:8 g#4!:8 d4:q f#4!:q | c#5!:q e4:q a#4!:q r:q | g4:h eb4!:q db5!:q | c5:q b4:8 ab4!:8 d5:h",
+"f4:q a4:q c5:qd f#4!:8 | b4:h eb4!:8 bb4!:8 ab4!:q | r:q c#5!:q d5:qd g#4!:8 | b4:h g4:q d#4!:q",
+"f4:q a4:8 e4:8 eb4!:q b4:q | d5:q f#4!:h g4:q | c#5!:q d4:8 ab4!:8 g4:q b#4!:q | a#4!:q e4:q db4!:q f4:q",
+"f4:q g4:q f#4!:qd b4:8 | a#4!:q g4:q c#4!:q r:q | e#4!:qd d5:8 bb4!:q c5:q | g4:8 a4:q d#4!:8 e4:h",
+"f4:q f#4!:q b4:qd a#4!:8 | c#5!:q b4:8 e4:8 ab4!:q r:q | g4:qd d#4!:8 e#4!:q c4:q | f4:h e4:q db5!:q",
+"f4:q g4:q b4:q a#4!:q | e4:q f#4!:8 c5:8 a4:h | c#4!:h bb4!:q gb4!:q | r:q b4:8 d4:8 d#4!:q b#4!:q",
+"f4:q ab4!:q g4:q eb4!:q | f#4!:q bb4!:q a4:8 e4:8 r:q | e#4!:q c#5!:q b4:h | a#4!:8 d4:qd c5:q g4:q",
+"f4:h eb4!:q g4:q | c4:qd f#4!:8 e#4!:h | c#5!:q a4:q d5:8 e4:qd | d#4!:q c5:8 b4:8 gb4!:h",
+"f4:q ab4!:q d5:8 bb4!:qd | c5:qd g4:8 eb4!:q a4:q | db4!:q b4:q r:q e4:q | a#4!:h f#4!:q b4:8 d#4!:8",
+"f4:q a4:q c#5!:q b4:q | f#4!:h a#4!:q d4:q | eb4!:q c4:q bb4!:q a4:8 c5:8 | b4:q e#4!:q g4:qd f#4!:8",
+"f4:q g4:q bb4!:q e4:q | c4:qd f#4!:8 b4:q d#4!:q | r:q e4:q g#4!:q c#5!:8 b#4!:8 | d4:q c5:q ab4!:h",
+"f4:q ab4!:q gb4!:q d4:q | e4:8 a4:q b4:8 eb4!:h | r:q cb5!:q g4:8 g#4!:8 e4:q | bb4!:h d5:q c#5!:q",
+"f4:h a4:q g#4!:q | b4:q d#5!:8 g4:8 b#4!:h | c4:q a#4!:q d4:q gb4!:q | f4:8 e4:qd c#5!:q eb4!:q",
+"f4:h ab4!:q g4:q | c5:q f4:q a#4!:h | d4:8 g4:8 r:q e#4!:q b4:q | d#4!:q c#5!:q bb4!:qd a4:8",
+"f4:qd bb4!:8 c5:q f#4!:q | a4:q ab4!:h d4:q | r:q g4:8 e4:8 f4:q b4:q | c#5!:8 e#4!:qd f#4!:q a4:q",
+"f4:q ab4!:q g4:qd c5:8 | a4:h b4:q f#4!:q | r:q bb4!:8 d4:8 c#4!:q b4!:q | g#4!:qd a4:8 e#4!:h",
+"f4:q a4:8 e4:8 eb4!:q gb4!:q | g4:qd c5:8 b4:q r:q | c5:q d#4!:q ab4!:q g4:q | f#4!:q e#4!:q b4:8 a#4!:qd",
+"f4:q bb4!:q g4:qd f#4!:8 | c#5!:q b4:8 e4:8 a4:q r:q | g#4!:q a#4!:q d5:8 e4:qd | a4:q g4:q eb4!:q d4:q",
+"f4:q bb4!:q a4:q c#5!:q | c5:qd b4:8 f4:q eb4!:q | f#4!:8 e4:q g#4!:8 g4!:h | a4:8 d#4!:qd c5:q f4:q",
+"f4:q ab4!:q g4:8 c4:qd | b4:q eb4!:q a4:q f#4!:q | g4:h bb4!:q a4:8 d#4!:8 | g#4!:qd e4:8 f4:q c4:q",
+"f4:q eb4!:8 a4:8 g4:q f#4!:q | d4:qd b4:8 a#4!:h | e4:q a4:q bb4!:q c#4!:q | f4:8 e4:qd c5:q gb4!:q",
+"f4:qd a4:8 c#5!:q b#4!:q | e4:q f#4!:q d#4!:q r:q | d4:q e4:8 ab4!:8 g4:h | b4:8 db4!:qd g4:q a#4!:q",
+"f4:q g4:q a4:8 g#4!:8 c#5!:q | e4:qd d5:8 b4:h | g4:q bb4!:q c5:q fb4!:q | eb4!:q a4:q b4:8 f#4!:qd",
+"f4:q a4:q g4:8 d#4!:qd | b4:q a4:q d5:q eb5!:q | bb4!:q e4:8 e#4!:8 f#4!:q c4:q | d4:qd c#4!:8 g#4!:h",
+"f4:qd e4:8 g4:q f#4!:q | a4:q eb4!:q bb4!:8 db4!:qd | r:q c5:q d5:q a#4!:q | b4:q a4:8 g#4!:8 e#4!:h",
+"f4:qd e4:8 d4:q c5:q | eb4!:q f#4!:q db5!:8 g4:qd | r:q bb4!:q a4:8 c#5!:q d#4!:8 | a#4!:q b4:q g4:h",
+"f4:q g4:q e4:q eb4!:q | b4:q d5:q bb4!:8 c5:qd | a4:8 ab4!:q db5!:8 f#4!:h | g#4!:qd b4:8 d4:q c#5!:q",
+"f4:q eb4!:q f#4!:qd g4:8 | ab4!:q c5:q b4:h | db5!:q a4:8 d#4!:8 r:q e4:q | eb4!:q g4:q b4:8 bb4!:qd",
+"f4:q ab4!:q g4:qd e4:8 | c#5!:q b4:q f#4!:8 g#4!:qd | eb4!:q db4!:8 c4:8 bb4!:q f4:q | a4:q d5:q c5:h",
+"f4:q g4:q e4:q a#4!:q | d4:qd b4:8 eb4!:q c4:q | a4:h g#4!:q c#4!:8 f4:8 | c5:q d#4!:q a4:8 bb4!:qd",
+"f#4!:q c5:q b4:q f4!:q | eb4!:q a4:q a#4!:h | g4:q e4:8 d#4!:8 g#4!:q b#3!:q | a4:qd f4:8 g4:h",
+"f#4!:q g4:q db4!:q e4:q | a4:qd b4:8 g#4!:q c5:q | cb5!:q bb4!:q eb4!:8 g4:qd | f4:8 b4:q a#4!:8 d5:h",
+"gb4!:q f4:q b4:h | a4:8 eb4!:q d4:8 g#4!:q r:q | c4:q e4:8 b4:8 f#4!:q g4:q | a4:q db5!:q cb5!:h",
+"gb4!:h bb4!:q f4:q | e4:q f#4!:q c#4!:8 a4:qd | r:q b4:8 c5:8 a4:q db4!:q | eb4!:q c5:q g4:h",
+"f#4!:q e4:q b4:q ab4!:q | c5:qd d4:8 a#4!:h | e#4!:q c4:8 d#4!:8 a4:h | db4!:q e4:q f4:8 b4:qd",
+"f#4!:q b4:q c5:q a4:q | gb4!:q b4:8 d4:8 c#4!:h | a#4!:q f4:q b4:q g4:q | d#4!:q c5:8 g#4!:8 e4:q e#4!:q",
+"f#4!:q b4:q e4:q d#4!:q | f4:q c5:q r:q a4:q | bb4!:8 e4:8 ab4!:q db4!:8 c4:8 e#4!:q | g4:q b4:q c#5!:h",
+"gb4!:q ab4!:q b4:q f4:q | c#5!:q e#4!:q r:q a#4!:q | f4:8 e4:8 d5:q g4:q eb4!:q | a4:8 b4:qd f#4!:q g4:q",
+"gb4!:q eb4!:q a4:h | g4:q db5!:q bb4!:qd c4:8 | d4:h f4:q a4:8 g4:8 | c#4!:q a#4!:q g4:8 d#4!:qd",
+"gb4!:q bb4!:q a4:q d5:q | b4:q r:q eb4!:q d4:q | g#4!:8 f4:8 d#4!:q b#4!:h | g4:q bb4!:q c5:8 a4:qd",
+"f#4!:q g4:q bb4!:h | c#5!:q b4:q d5:qd a4:8 | g4:h d#4!:q g4:8 eb4!:8 | c5:q b4:q g#4!:8 d4:qd",
+"gb4!:q bb4!:q a4:q d5:q | g4:q eb4!:8 d4:8 c#5!:h | c5:q db5!:q r:q g#4!:q | f4:qd e4:8 cb5!:h",
+"f#4!:q g4:q eb4!:q a4:q | ab4!:8 b4:qd c5:q db4!:q | bb4!:8 a4:q d5:8 c#5!:h | f4:q g4:q d5:qd g#4!:8",
+"f#4!:q g4:q d4:q g#4!:q | d#4!:q b4:8 e4:8 a4:q r:q | c#5!:8 b4:q e#4!:8 a#4!:h | b4:q c5:q f4:q bb4!:q",
+"gb4!:q ab4!:q e4:h | c#5!:8 d4:qd a4:q g4:q | c4:8 eb4!:8 b4:q bb4!:q f4:q | f#4!:qd a4:8 d5:h",
+"f#4!:q g4:q eb4!:q d4:q | c5:q a#4!:q b4:q r:8 f4:8 | e4:q bb4!:q g4:8 g#4!:8 d5:q | c#5!:h a4:h",
+"f#4!:q a4:q g4:qd ab4!:8 | f4:q c#5!:q d5:q g#4!:q | r:q a4:q e4:q d#4!:8 b4:8 | g4:q eb4!:q c5:h",
+"f#4!:q e4:8 eb4!:8 a4:q ab4!:q | d4:q gb4!:h cb4!:q | g4:qd b4:8 a#4!:q e4:q | d#4!:h c5:q f4:q",
+"gb4!:q db4!:q c4:q e4:q | d#4!:qd g4:8 e4:q a#4!:q | g#4!:q c4:8 a4:8 bb4!:q f4:q | b4:h d5:q b#4!:q",
+"f#4!:q a4:q g4:qd g#4!:8 | d4:q e4:q b4:h | a4:8 c#5!:qd c5!:q d4:q | c4:8 g4:q e#4!:8 a#4!:h",
+"f#4!:q e4:q d#4!:q g4:8 ab4!:8 | db5!:q e4:q b4:h | c#5!:q b#4!:q f4:8 a4:qd | a#4!:h d4:h",
+"f#4!:q c#5!:q d5:q a4:q | c5:q g4:h ab4!:q | bb4!:qd d4:8 gb4!:q e4:8 f4:8 | b4:q eb4!:q d5:q b#4!:q",
+"f#4!:h b4:q g4:q | c4:q f4:q db5!:q bb4!:q | e4:qd a4:8 ab4!:q c#5!:q | b#4!:q d5:8 eb4!:8 a4:h",
+"gb4!:q d4:q f4:8 g4!:8 c5:q | b4:q a4:q db4!:h | r:8 a4:8 e4:q c#5!:q b#4!:q | f4:q a#4!:h d#4!:q",
+"gb4!:q f4:8 e4:8 g4!:q c5:q | b4:q a#4!:q c5:q e#4!:q | r:q d4:q g4:8 eb4!:8 f#4!:q | a4:q d4:q g#4!:h",
+"f#4!:q b4:q g4:8 a4:q bb4!:8 | d5:h c#5!:q e4:q | d#4!:qd f4:8 b#4!:q g#4!:q | bb4!:h c4:h",
+"f#4!:q a4:8 g4:8 d4:q e4:q | d#4!:q b4:q a#4!:q c5:q | r:q eb5!:8 c#5!:8 f4:q ab4!:q | g4:q e#4!:q c4:q b4:q",
+"f#4!:q a4:q g4:q d4:q | c#4!:q g4:q f#4!:h | bb4!:8 f4:8 a4:q ab4!:8 f4:8 eb4!:q | r:q b#4!:q d4:h",
+"gb4!:q f4:q c5:q b4:q | g4:q bb4!:8 a4:8 d4:h | f#4!:8 e4:8 g4:q b#4!:q d#4!:q | a4:q c#4!:h g#4!:q",
+"f#4!:q a4:q db4!:q b4:q | g4:8 f#4!:8 c5:q g#4!:h | d5:8 a#4!:8 b4:q e4:q d#4!:q | a4:q f4:q cb5!:h",
+"gb4!:q eb4!:q f4:q b4:q | e4:q g4:8 c5:8 e#4!:q d5:q | c#5!:q a4:q g#4!:qd bb4!:8 | a4:q c4:q f#4!:h",
+"f#4!:q a4:q g4:q d#4!:q | e4:q gb4!:8 f4:8 c5:q r:q | db5!:q gb4!:q b4:qd fb4!:8 | ab4!:h c4:h",
+"gb4!:q e4:q b4:q a4:q | eb4!:8 d4:q a#4!:8 g4:h | c#5!:q e#4!:8 b4:8 ab4!:q d5:q | f4:q c5:q d#4!:h",
+"f#4!:q e4:8 e#4!:8 c5:q b4:q | a4:q d4:q g#4!:h | e4:q eb4!:q f#4!:8 g4:q d4:8 | c#5!:q f4:h bb4!:q",
+"f#4!:q c4:q g4:q g#4!:q | e#4!:qd a4:8 b3:h | d4:q e4:q c#5!:8 d5:8 bb4!:q | a4:8 db5!:qd c5:h",
+"gb4!:q bb4!:q a4:q e4:q | g4:qd db5!:8 c5:q f#4!:q | r:q d4:q eb4!:q f4:8 g4:8 | b4:q c#5!:q a4:h",
+"f#4!:q a4:q g4:qd g#4!:8 | c#5!:q e4:q b4:h | d4:q f4:q cb5!:8 bb4!:qd | c4:q f#4!:8 g4:8 e4:h",
+"gb4!:q e4:q eb4!:qd b4:8 | c5:q ab4!:q g4:h | r:q c4:8 d4:8 f#4!:q e#4!:q | e4:qd b4:8 a4:q c#5!:q",
+"f#4!:q c5:q b4:q d5:8 a4:8 | bb4!:qd f4:8 ab4!:q g4:q | r:q e4:q c5:8 gb4!:qd | c#4!:q a#4!:q f4:h",
+"f#4!:q a4:q b4:qd d#4!:8 | g4:q f4:8 b4:8 c4:h | db4!:8 bb4!:qd f4:q gb4!:q | d4:q e4:q g#4!:h",
+"f#4!:q b4:q a4:q g4:q | g#4!:h d#4!:h | c#4!:q bb4!:q f4:8 g4:q db5!:8 | c5:q b4:8 f4:8 eb4!:h",
+"gb4!:q bb4!:q a4:q f4:q | e4:qd b4:8 db4!:h | c4:8 d4:8 g4:q eb4!:q c#5!:q | b#4!:h a#4!:h",
+"gb4!:q db4!:q f4:8 c5:q b4:8 | d5:q a4:q b4:q a#4!:q | g#4!:q e#4!:q c4:q d4:q | e4:q g4:8 eb4!:8 f#4!:h",
+"gb4!:q f4:8 e4:8 g4!:q c5:q | b4:q g#4!:q a#4!:q e#4!:q | e4:q d4:q a4:q c#4!:q | g4:8 c4:q eb4!:8 b4:h",
+"f#4!:q b4:q e4:qd a4:8 | f4:q g#4!:q c5:q d5:q | bb4!:8 e4:8 a4:q g4:q db4!:q | f4:q gb4!:q eb4!:8 c#5!:qd",
+"f#4!:q b4:q e4:q d4:q | g4:q e5:q c5:q b4:q | bb4!:8 f4:q a4:8 ab4!:q fb4!:q | eb4!:q c#5!:8 a#4!:8 d4:h",
+"f#4!:q b4:q g4:q f#4:q | e4:8 f4:q b#4!:8 d#4!:q r:q | c4:q g4:q eb4!:qd ab4!:8 | c#5!:q bb4!:q a4:8 d4:qd",
+"gb4!:q ab4!:8 f4:8 b4:q d5:q | c#5!:q eb4!:q a4:q r:q | f4:8 e4:q g4:8 g#4!:q c4:q | a#4!:h f#4!:h",
+"f#4!:q b4:q a4:q d4:q | e4:q eb4!:8 gb4!:8 c4:q r:q | db4!:q a4:q eb4!:qd db4:8 | f4:q b#4!:q g4:h",
+"gb4!:q ab4!:q f4:8 e4:qd | d4:q a4:8 bb4!:8 c4:h | f#4!:q b4:q c#5!:q g4:q | d#5!:h e#4!:h",
+"gb4!:q f4:8 a4:8 e4:q a#4!:q | b4:q c4:q db4!:q b4:q | f4:q a4:q g4:8 c#4!:q d#4!:8 | g4:q e#4!:q f#4!:h",
+"f#4!:q g4:q c5:q b4:q | a4:q bb4!:8 ab4!:8 e4:h | d#5!:h a4:8 f4:q b#3!:8 | c#4!:q d4:q b4:q g4:q",
+"f#4!:q a4:8 g4:8 d#4!:q e4:q | d5:q b4:q a#4!:q e4:q | c4:q gb4!:q db5!:8 c5:qd | bb4!:qd f4:8 g#4!:h",
+"f#4!:q c5:q g4:q a4:q | a#4!:h d5:8 c#5!:q f4:8 | e4:q b#4!:q g#4!:qd d4:8 | eb4!:q bb4!:q f4:8 g4:qd",
+"gb4!:q db4!:q b4:qd bb4!:8 | g4:q ab4!:8 c5:8 e4:h | f4:q b4:q g4:8 f#4!:qd | e#4!:q d4:q a4:q f4:q",
+"f#4!:q b4:h g4:q | g#4!:q d4:q f4:q c#5!:q | b#4!:8 e4:8 a4:q db4!:q g4:q | a#4!:8 f4:q eb4!:8 d5:h",
+"f#4!:q e4:q c5:q bb4!:q | g4:8 ab4!:q eb4!:8 db4!:h | a4:q f4:8 b4:8 d5:q e4:q | f#4!:q e#4!:q g4:h",
+"gb4!:q f4:8 b4:8 bb4!:q d4:q | e4:q g4:q eb4!:q a4:q | f#4!:qd g4:8 c5:q d#4!:q | a4:q g#4!:q c4:8 e4:qd",
+"f#4!:q b4:q e4:q d#4!:q | g4:8 d4:8 c5:q b4:h | bb4!:8 a4:q ab4!:8 fb4!:q eb4!:q | g4:q d4:q c#4!:h",
+"gb4!:q bb4!:q a4:q c#5!:q | d5:q a#4!:q f4:q e4:q | f#4!:8 eb4!:q a4:8 g4:q b4:q | c5:q g#4!:8 f4:8 b4:h",
+"f#4!:q c5:q bb4!:qd d4:8 | e4:q g#4!:q a#4!:h | g4:q b4:8 f4:8 d#4!:q b#3!:q | a4:qd db5!:8 g4:h",
+"f#4!:q c5:q b4:qd d4:8 | a4:q e4:q bb4!:q db4!:q | c4:q g4:8 e4:8 c#5!:h | a#4!:q b4:q d4:qd gb4!:8",
+"gb4!:q db4!:q b4:q f4:q | g4:q f4:8 e4:8 ab4!:h | f#4!:q d5:q b4:8 e#4!:qd | c4:q bb4!:q d#5!:h",
+"g4:h b4:q f#4!:q | c5:q gb4!:q e4:h | d4:q f4:8 a4:8 cb5!:q bb4!:q | c#4!:q a4:8 g#4!:8 d#4!:h",
+"g4:h f4:q g#4!:q | b4:q a4:q c5:qd bb4!:8 | ab4!:q eb4!:8 gb4!:8 d4:q c#5!:q | e4:h d#4!:8 a4:qd",
+"g4:q a4:q e4:q a#4!:q | f4:q c5:8 b4:8 d#4!:h | c#4!:q g#4!:q d5:8 c5:8 f4:q | bb4!:q eb4!:q ab4!:h",
+"g4:q e4:q d#4!:q a4:q | f4:8 g#4!:q c5:8 bb4!:q r:q | c#5!:q a#4!:q e4:q gb4!:q | d4:q a4:8 cb5!:8 g4:h",
+"g4:q a4:q gb4!:q c4:q | f#4!:q e4:8 b4:8 d5:q r:q | a4:q db5!:q c5:q a#4!:q | d#4!:q f4:8 b4:8 g#4!:h",
+"g4:q e4:q f#4!:q e#4!:q | a4:qd db5!:8 eb4!:q r:q | f4:q g#4!:q c4:8 db4!:q bb4!:8 | a4:h d5:q b4:q",
+"g4:q f#4!:q a4:q d4:q | c5:h bb4!:qd f4:8 | eb4!:q cb5!:q ab4!:q g4:q | b4:q c#5!:8 a#4!:8 e4:h",
+"g4:q f#4!:q e4:q ab4!:q | b4:q eb4!:q fb4!:h | a4:8 c#4!:q f4:8 d5:h | c5:q b4:8 a#4!:8 c4:q f4:q",
+"g4:q bb4!:q c5:q gb4!:q | f4:q ab4!:8 e4:8 c#5!:h | e4:q a4:q d#4!:8 b4:q f#4!:8 | eb4!:q f4:q d5:h",
+"g4:q b4:q f#4!:qd a#4!:8 | e#4!:h b4:q g#4!:q | a4:q eb4!:q d4:qd c#5!:8 | e4:q b4:8 f4:8 ab4!:q c4:q",
+"g4:h c5:q bb4!:q | d4:q f#4!:8 a#4!:8 e4:q r:q | ab4!:q db5!:8 g4:8 eb4!:h | b4:q e4:q a4:q c#5!:q",
+"g4:q g#4!:q d4:h | f4:qd d#4!:8 b4:q c5:q | db5!:q r:q a4:8 bb4!:q c#4!:8 | e4:8 c4:qd gb4!:q b4:q",
+"g4:q b4:q g#4!:q a4:q | f#4!:q r:q eb4!:qd db5!:8 | c5:8 f4:8 e4:h | g4:q c5:q d4:q a#4!:q",
+"g4:h a4:q c5:q | d#5!:q c#5!:8 e#4!:8 b4:h | db5!:q g4:q ab4!:q e4:q | d4:qd g#4!:8 f#4!:q e4:q",
+"g4:q f#4!:q b4:h | d#4!:q d#4:h e#4!:8 a4:8 | db5!:q e4:q ab4!:8 d4:qd | f4:qd b4:8 a#4!:q c#5!:q",
+"g4:q gb4!:q bb4!:q d4:q | a4:q c5:8 g#4!:8 e4:h | b4:q r:q db5!:8 f4:8 e4:q | eb4!:q f#4!:q a4:q c#5!:q",
+"g4:q c5:q a#4!:h | e4:q d#4!:q b4:8 ab4!:qd | r:q gb4!:q db4!:q a4:8 c#4!:8 | f4:q g4:q eb4!:qd d4:8",
+"g4:h e4:q d#4!:q | b4:8 c5:qd a#4!:q d4:q | bb4!:q f#4!:8 a4:8 r:q ab4!:q | b4:q c#5!:q eb4!:qd a4:8",
+"g4:q f#4!:q e4:q ab4!:q | c5:qd db4!:8 f4:h | gb4!:q c4:q a4:8 d#4!:qd | f4:q b4:8 d5:8 e#4!:h",
+"g4:qd ab4!:8 b4:q f#4!:q | eb4!:q a4:8 d4:8 b4:h | r:q f4:q a#4!:q c4:q | db4!:8 g4:qd b#4!:q e4:q",
+"g4:q c5:q b4:q a4:q | f#4!:qd c#4!:8 eb4!:h | d4:q a4:q g#4!:8 f#4!:8 c5:q | a#4!:8 d5:qd gb4!:q f4:q",
+"g4:q f4:q d#4!:q e4:q | b4:8 a#4!:q c5:8 eb4!:q r:q | d4:q g4:q cb5!:8 bb4!:qd | d5:qd a4:8 f#4!:q g#4!:q",
+"g4:q a4:q e4:q c4:q | g#4!:qd bb4!:8 e4:q cb5!:q | r:q d5:q gb4!:q f4:8 b4:8 | c#5!:q a4:q d#4!:q g4:q",
+"g4:q f4:q b4:8 d#4!:8 g#4!:q | a4:q d5:q c5:q e4:q | c#4!:q a4:q g4:q e#4!:q | f#4!:8 c5:8 bb4!:q db4!:h",
+"g4:q eb4!:q ab4!:8 c5:qd | f4:q b4:q g#4!:q d4:q | e4:q r:q bb4!:8 a4:8 f#4!:q | b#3!:qd a4:8 g4:q d4:q",
+"g4:q f4:8 d4:8 g4:q f#4!:q | c5:q e4:q d4:q g#4!:q | r:q ab4!:8 c#5!:8 b4:q eb4!:q | a4:q d4:q b#3!:q a#4!:q",
+"g4:q e4:q f4:q d#4!:q | a4:qd d4:8 bb4!:q r:q | cb5!:q g4:q eb4!:8 c4:q ab4!:8 | f#4!:q d4:q c#5!:q b4:q",
+"g4:q e4:q f#4!:qd c4:8 | a#4!:q b4:q g4:q c#4!:q | f4:q r:q cb5!:8 eb4!:8 g4:q | a4:8 bb4!:qd d4:q gb4!:q",
+"g4:q f4:q ab4!:q e4:q | b4:h d#4!:qd f#4!:8 | eb4!:q bb4!:8 a4:8 g4:q d5:q | c#5!:qd b#4!:8 a4:h",
+"g4:h e4:qd ab4!:8 | c5:q b4:h f4:q | eb4!:q d4:8 c#4!:8 b4:q f#4!:q | e#4!:q a4:q d5:q c#5!:q",
+"g4:q f#4!:q e4:q b4:q | a4:qd d4:8 fb4!:h | ab4!:8 d4:q bb4!:8 c4:q f4:q | eb4!:q d5:q c5:q g#4!:q",
+"g4:q f#4!:q b4:q e4:q | d#4!:8 a4:q g#4!:8 b#4!:h | c#5!:q d5:q bb4!:8 f4:qd | ab4!:8 g4:qd c5:q d4:q",
+"g4:q e4:q d4:q g#4!:q | f4:q c#5!:h b#4!:q | d5:q b4:8 eb4!:8 f4:q d#4!:q | f#4!:8 c4:8 bb4!:q a4:h",
+"g4:h bb4!:q a4:q | ab4!:q f4:h b4:q | eb4!:q f#4!:q d4:qd c#5!:8 | b#4!:q a4:8 e4:8 db5!:h",
+"g4:q b4:q a#4!:q f#4!:q | eb4!:q g4:q ab4!:8 d4:qd | bb4!:q a4:q c#4!:qd e#4!:8 | r:q c5:q d4:q f4:8 e4:8",
+"g4:q b4:q c5:q gb4!:q | f4:q bb4!:8 ab4!:8 c#5!:h | e4:q a4:q d4:8 db4!:q fb4!:8 | eb4!:q b4:q c4:h",
+"g4:q f4:q eb4!:qd g4:8 | a4:q d5:h c5:q | f#4!:q b4:q g#4!:qd b#3!:8 | c#4!:8 e4:8 bb4!:q ab4!:h",
+"g4:q f4:q ab4!:q eb4!:q | b4:qd a4:8 e#4!:q d5:q | r:q a#4!:8 c5:8 e4:q d4:q | c#4!:q b4:q f#4!:h",
+"g4:q a4:q g#4!:q c#5!:q | d5:qd b4:8 e#4!:h | g4:q bb4!:8 eb4!:8 c4:q a4:q | c#5!:h e4:h",
+"g4:q eb4!:q f#4!:q b4:q | a4:qd d5:8 e4:q r:q | e#4!:8 b4:q bb4!:8 c#4!:q f4:q | db4!:q c5:q g#4!:h",
+"g4:q a#4!:q c#5!:q b4:q | e4:qd d#4!:8 a4:h | cb5!:q d5:8 b4:8 d4:q f#4!:q | f4:qd c5:8 db4!:q ab4!:q",
+"g4:q b4:q d4:8 e4:qd | a4:q bb4!:q d5:q c#5!:q | r:q f4:8 b4:8 g#4!:q e#4!:q | f#4!:q eb4!:q g4:q c5:q",
+"g4:q e4:q bb4!:8 ab4!:qd | b4:q a4:8 c#5!:8 d5:h | e#4!:q c5:q g4:q f#4!:q | f4:qd g#4!:8 a4:q eb4!:q",
+"g4:q e4:q f#4!:q e#4!:q | b4:qd d5:8 c#5!:q r:q | c5:q g#4!:q e4:8 d4:q bb4!:8 | a4:q d#4!:q b4:h",
+"g4:q f4:q ab4!:q d4:q | c5:h e4:qd f#4!:8 | eb4!:q cb5!:q bb4!:q g4:q | b4:qd c#5!:8 a4:h",
+"g4:h ab4!:qd fb4!:8 | d5:q bb4!:h e4:q | eb4!:q c4:8 f4:8 b4:q f#4!:q | a4:q d5:q c#5!:h",
+"g4:qd f#4!:8 e4:q bb4!:q | a4:q d#4!:q f4:h | ab4!:8 c4:q b4:8 db4!:h | eb4!:q c5:q d4:q f4:q",
+"g4:q eb4!:8 d4:8 gb4!:h | c4:q a4:q g#4!:q a#4!:q | e4:q d5:q f4:8 bb4!:qd | b4:8 g4:qd d5:h",
+"g4:q eb4!:q db4!:q f4:q | e4:8 d4:8 c#5!:q b#4!:h | a4:q b4:q ab4!:8 f4:8 e4:q | f#4!:q c4:q d4:q bb4!:q",
+"g4:q bb4!:q a4:qd ab4!:8 | f#4!:q b4:8 e4:8 b#4!:h | g#4!:h d4:q c#4!:q | f4:8 d#4!:qd e4:q a4:q",
+"g4:q b4:q ab4!:q eb4!:q | f4:q bb4!:8 d4:8 c5:h | e4:q a#4!:q d4:8 c#4!:q f#4!:q | g4:q a4:q f4:h",
+"g4:q f4:q e4:qd g#4!:8 | a4:h d5:q c#5!:q | f#4!:q bb4!:q g4:qd b#3!:8 | c#4!:q e4:q b4:8 d4:8 eb4!:q",
+"g4:q f#4!:q eb4!:8 bb4!:qd | a4:qd d5:8 c#5!:q e4:q | r:8 f4:q b4:8 a#4!:q c4:q | e#4!:q g#4!:q a4:h",
+"g4:q c5:q f#4!:qd a4:8 | e#4!:h d5:q c#5!:q | f4:q bb4!:q g4:qd d4:8 | e4:8 a#4!:8 f4:q g#4!:h",
+"g4:q b4:q c#5!:q a#4!:q | d4:qd f#4!:8 e#4!:q r:q | a4:q b4:8 g4:8 eb4!:q f4:q | db4!:q c4:q ab4!:q e4:q",
+"g4:q eb4!:q c4:q d4:q | f4:8 f#4!:q bb4!:8 ab4!:q e4:q | d4:q c#5!:8 b#4!:8 g#4!:q a4:q | b3:h g4:h",
+"g4:q f4:q g#4!:8 bb4!:qd | f#4!:8 b4:8 r:q e4:qd eb4!:8 | c4:q d4:q gb4!:q e4:q | c#5!:q f4:q b4:q a4:q",
+"g4:q f4:8 ab4!:8 r:q a4!:q | bb4!:q d5:h c5:q | d#4!:q b4:q e4:q f#4!:q | c#4!:qd a4:8 d4:h",
+"g4:q d5:q a4:8 bb4!:qd | db5!:q b4:q c5:q d#4!:q | e4:h f4:q ab4!:8 f#4!:8 | g4:qd eb4!:8 a4:q a#4!:q",
+"g4:q ab4!:q f4:qd f#4!:8 | eb4!:q a4:8 d4:8 b4:q r:q | e4:h g#4!:q c4:q | db4!:q c5:q f4:q a#4!:q",
+"g4:q d#4!:8 e4:8 b4:h | c4:q g#4!:q a#4!:q a4!:q | c#5!:q d5:q f#4!:8 bb4!:qd | c5:8 g4:qd b4:q f4:q",
+"g4:qd e4:8 b4:q a#4!:q | d4:q b4:8 a4:8 eb4!:q c#4!:q | a4:q ab4!:q db4!:q f4:q | c5:q f#4!:q a4:8 bb4!:qd",
+"g4:qd ab4!:8 f4:q b4:q | db5!:q c5:q e4:8 a4:qd | r:q b4:8 f#4!:8 d#4!:q g#4!:q | a#4!:q d4:q g4:q eb4!:q",
+"g#4!:q b4:q d5:q a4:q | db5!:q c5:8 e4:8 gb4!:q r:q | f4:8 a#4!:q d#5!:8 b4:q c#5!:q | b4:h g4:h",
+"g#4!:q a4:q e4:q a#4!:q | d#4!:8 c4:q b4:8 gb4!:h | c5:q bb4!:8 e4:8 f4:q c#5!:q | d5:h g4:h",
+"g#4!:q e4:q f4:q b4:q | c#5!:h g4:q e4:q | f#4!:q r:q d4:8 eb4!:q gb4!:8 | c4:qd a4:8 e#4!:h",
+"ab4!:q g4:q d4:q f#4!:q | b4:q a4:8 eb4!:8 b4:q r:q | g#4!:h c#5!:qd e4:8 | db4!:q c5:q f4:q bb4!:q",
+"ab4!:q g4:q bb4!:q f4:q | gb4!:q c5:q e4:8 c#5!:qd | d5:q f#4!:8 a4:8 e#4!:h | d#4!:qd b4:8 a4:h",
+"g#4!:q f4:q db4!:q a4:q | bb4!:qd c5:8 cb5!:h | gb4!:q d4:8 eb4!:8 b4:q c#5!:q | g4:qd e4:8 c4:h",
+"ab4!:q g4:q c5:q b4:q | a#4!:h d4:qd e4:8 | gb4!:q a4:q bb4!:8 db4!:qd | f4:q e4:8 d#4!:8 g#4!:h",
+"ab4!:q e4:q c5:q b4:q | g4:q eb4!:q bb4!:8 gb4!:qd | f4:h a4:8 c#5!:8 d5:q | d#4!:q g4:q b4:8 c5:qd",
+"g#4!:q e4:q r:q d4:q | g4:q f#4!:8 bb4!:8 ab4!:h | b4:q a4:q db5!:8 c5:qd | gb4!:qd f4:8 eb4!:h",
+"g#4!:q c4:q r:q d4:q | g4:8 f#4!:qd bb4!:q f4!:q | d#4!:q e4:8 a4:8 b4:h | eb4!:qd g4:8 f4:q b#4!:q",
+"ab4!:q d5:q r:q b4:q | f4:h f#4!:8 e4:q c#4!:8 | c5:8 bb4!:qd gb4!:q eb4!:q | a4:q g4:q f4:8 d#4!:qd",
+"g#4!:q c5:q bb4!:h | db5!:q b4:q a4:8 eb4!:qd | d4:8 f4:q e4:8 a#4!:h | g4:qd f4:8 cb5!:q ab4!:q",
+"ab4!:q g4:q b4:h | f4:q c#4!:8 f#4!:8 g#4!:qd e4:8 | eb4!:q a4:q bb4!:h | d4:qd e#4!:8 c5:q f4:q",
+"ab4!:q gb4!:q b4:q e4:q | c4:qd bb4!:8 f#4!:h | eb4!:8 a4:q c#5!:8 d4:q g4:q | f4:8 e4:qd c5:q g#4!:q",
+"g#4!:q f4:q a4:q c#5!:q | d#5!:8 b4:8 g4:q f#4!:h | e4:q r:q bb4!:8 d4:8 c4:q | a4:q db5!:q ab4!:h",
+"g#4!:q a4:q f#4!:q e4:q | bb4!:qd c5:8 eb4!:h | d4:8 f4:q c#4!:8 e#4!:q a4:q | b4:q g4:q f#4!:h",
+"g#4!:q b4:q a4:qd g4!:8 | d4:q c#4!:q f#4!:q r:q | b4:8 f4:q eb4!:8 fb4!:q c5:q | d5:h e4:q a#4!:q",
+"ab4!:q f4:q e4:q f#4!:q | b4:8 g4:8 d5:q c5:h | bb4!:q r:q e4:8 d#5!:qd | b#4!:q d#4!:q a4:q c#5!:q",
+"ab4!:q b4:q f4:q e4:8 g4:8 | a4:q f#4!:q eb4!:q d4:q | bb4!:q r:8 cb5!:8 db4!:q g4:q | d5:q c5:q gb4!:h",
+"g#4!:h a4:q e4:q | d4:qd c4:8 f4:q r:q | eb5!:q g4:q c#5!:8 bb4!:qd | f#4!:8 e#4!:q g#4!:8 b4:h",
+"g#4!:q a4:q f4:qd c5:8 | bb4!:q f#4!:8 d#4!:8 g4:q r:q | eb4!:h c5:q db4!:q | e4:q b4:q d5:q ab4!:q",
+"g#4!:q c#5!:q b4:8 eb4!:qd | f4:h c4:q g4:q | a4:qd d#5!:8 c#5!:q b#4!:q | r:q e4:q d5:8 c5:q f#4!:8",
+"ab4!:q g4:q f4:q bb4!:q | c5:h a4:8 g#4!:qd | d4:8 e4:8 b4:q c#5!:qd f#4!:8 | d4:q eb4!:q b4:q a#4!:q",
+"ab4!:q g4:q e4:8 bb4!:qd | c#5!:q a4:q d4:q r:q | f#4!:8 e#4!:8 g#4!:q a4:q c4:q | b4:h f4:qd eb4!:8",
+"g#4!:q a4:q f#4!:q e4:q | d4:8 c#4!:8 f4:q g4:h | bb4!:q eb4!:q fb4!:qd d5:8 | b4:q r:q c4:q gb4!:q",
+"ab4!:q f4:q gb4!:q bb4!:8 d4:8 | c4:q g4:q a4:h | r:8 eb4!:8 b4:q d5:qd g#4!:8 | b#4!:h c#5!:q e4:q",
+"g#4!:h b4:q c5:q | bb4!:8 a4:8 eb4!:q f#4!:q d4:q | e4:q r:q d5:8 ab4!:8 g4:q | c#4!:q e#4!:q b4:h",
+"ab4!:q f4:q g4:qd c#4!:8 | eb4!:h b4:q a4:q | f4:q bb4!:q cb5!:q ab4!:8 e4:8 | d5:q r:q f#4!:q c5:q",
+"ab4!:q bb4!:q g4:qd e4:8 | d4:q a4:q g4:q b4:q | c#5!:8 d#4!:q e#4!:8 c4:h | f4:q d5:q c5:q gb4!:q",
+"g#4!:q f#4!:q c4:qd d4:8 | e4:h bb4!:8 a4:q | f4:q eb4!:q db5!:8 cb5!:qd | g4:q b4:q d#4!:h",
+"ab4!:q c5:q b4:q g4:q | f4:qd gb4!:8 eb4!:h | d4:8 g#4!:q b#4!:8 c#5!:q e4:q | d5:h a4:q bb4!:q",
+"g#4!:q e4:q b4:q f#4!:q | a4:qd c5:8 bb4!:h | d4:8 ab4!:8 g4:q eb4!:q d5:q | c#5!:qd b#4!:8 f4:h",
+"ab4!:q gb4!:q b4:q c#5!:8 d5:8 | g4:h f4:q c5:q | bb4!:q e4:q d5:qd g#4!:8 | b#4!:q a4:q eb4!:h",
+"g#4!:q f#4!:q e4:8 a4:qd | bb4!:q g4:q c4:q d4:q | r:q f4:q b4:8 d4:8 eb4!:q | fb4!:h c5:qd db4!:8",
+"g#4!:q b4:q c#5!:qd d5:8 | b4:8 a4:8 e4:q f#4!:h | d5:q c5:q b4:q d#4!:q | e#4!:8 g4:qd bb4!:q c4:q",
+"g#4!:q b4:q a4:qd e4:8 | bb4!:q d4:q ab4!:q r:q | e#4!:q c#5!:q g4:8 a4:8 d#4!:q | f4:h c4:8 ab4!:qd",
+"ab4!:q d4:q e4:8 f4:8 eb4!:q | g4:h f#4!:8 b4:qd | c5:q gb4!:q a4:q f4:q | bb4!:q c#5!:q e4:h",
+"ab4!:q e4:q f4:q c5:8 g4:8 | a4:q g#4!:q eb4!:q d4:q | bb4!:q c5:q g4:8 e4:8 f#4!:q | e#4!:q c#4!:q b4:h",
+"g#4!:qd e4:8 f4:q a4:q | eb4!:h b4:q d4:q | c4:q db4!:h cb4!:q | bb3!:q g4:8 f#4!:8 d4:h",
+"g#4!:q a4:q bb4!:qd f#4!:8 | e4:q a4:8 d#4!:8 b4:q r:q | g4:h d5:q eb4!:q | db4!:q c5:q f4:q g4:q",
+"g#4!:q c5:q f#4!:8 d4:qd | bb4!:q c#4!:8 a4:8 g4:h | e4:qd a4:8 b4:q eb4!:q | b3:q g#4!:q e#4!:h",
+"ab4!:q c5:8 e4:8 bb4!:q f4:q | ab4!:q g4:q e4:8 c#5!:qd | d5:q f#4!:q a4:q eb4!:q | db4!:qd b4:8 a4:h",
+"ab4!:q eb4!:q db4!:q g4:q | f4:h d4:8 g#4!:qd | b4:8 a4:8 f#4!:q bb4!:qd c5:8 | d5:q e4:q b4:q a#4!:q",
+"ab4!:q g4:q e4:8 f4:8 bb4!:q | c5:q b4:q g#4!:q d#4!:q | r:q f#4!:8 e#4!:8 g4:q d4:q | b4:h c#4!:h",
+"ab4!:q bb4!:q g4:qd c#5!:8 | d5:q b4:q f4:q e4:q | f#4!:8 e#4!:q a4:8 g4:q b4:q | c5:q d4:q a4:q eb4!:q",
+"g#4!:h e4:q f4:q | f#4!:qd c4:8 bb4!:q a4:q | b4:q g4:q e#4!:8 c#4!:q d#4!:8 | b4:h d4:h",
+"g#4!:q e4:8 f4:8 c#4!:q b4:q | a4:q db5!:q cb5!:h | eb4!:8 f4:8 d4:q e4!:q a#4!:q | c4:h g4:h",
+"ab4!:q g4:q c5:q b4:8 c#5!:8 | a4:h f4:q e4:q | bb4!:q d4:8 c4:8 e4:q f#4!:q | d#4!:h g#4!:h",
+"ab4!:q eb4!:q d4:8 g4:q f4:8 | bb4!:q a4:q d5:h | c#5!:q e4:q d#4!:q c4:8 b4:8 | gb4!:h f4:h",
+"g#4!:q a4:q db5!:q b4:q | d4:qd ab4!:8 e4:h | f4:q c#5!:8 b4:8 g4:q e4:q | eb4!:qd bb4!:8 f#4!:q g4:q",
+"g#4!:q e4:q f4:8 b4:qd | d4:q db4!:q g4:q r:q | f#4!:q b4:8 a#4!:8 c5:q eb4!:q | a4:qd bb4!:8 gb4!:h",
+"ab4!:q g4:8 f4:8 b4:q c5:q | c#5!:q d5:q f#4!:q g#4!:q | bb4!:q e4:8 d#4!:8 a4:q b4!:q | f4:q g4:q e4:h",
+"ab4!:qd g4:8 e4:q b4:q | f4:q a4:h e#4!:q | f#4!:q eb4!:q c4:q g4:8 g#4!:8 | d5:h c#5!:h",
+"ab4!:q g4:8 f#4!:8 b4:q c#5!:q | c5:q eb4!:h a4:q | f4:8 e4:8 gb4!:q bb4!:q c4:q | g#4!:h d4:h",
+"ab4!:q g4:8 f4:8 d4:q b4:q | b4:h eb4!:q a4:q | f4:q f#4!:8 d#4!:8 e4:q cb5!:q | db4!:h c4:h",
+"ab4!:q eb4!:q f4:q b4:q | c5:qd bb4!:8 gb4!:h | a4:8 d4:8 g#4!:q e4:q f#4!:q | g4:8 c#4!:qd a4:h",
+"g#4!:q f#4!:q b4:q c5:q | e4:qd f4:8 db4!:h | eb4!:q r:8 d4:8 b4:q bb4!:q | g4:qd a4:8 c#5!:h",
+"g#4!:q a4:q f#4!:q e#4!:q | b4:qd c5:8 eb4!:h | d4:8 b4:q f4:8 e4:q a4:q | bb4!:qd c#4!:8 g4:h",
+"ab4!:q c5:q b4:q eb4!:q | a4:qd gb4!:8 f4:h | g4:8 d#4!:q a4:8 b4:q c#4!:q | g#4!:h d4:h",
+"ab4!:q e4:q g4:q c#5!:q | f4:h eb4!:8 a4:qd | g#4!:q b4:8 e#4!:8 f#4!:q d4:q | c4:h bb4!:h",
+"g#4!:q e4:8 f4:8 c#4!:q a4:q | g4:q c5:q ab4!:h | e4:8 gb4!:8 db4!:q f4:q bb4!:q | a4:q b4:q g4:h",
+"g#4!:q a4:q e4:q f4:q | ab4!:q d4:q b4:h | bb4!:q c5:q db5!:8 eb4!:qd | a4:qd d#4!:8 f#4!:h",
+"a4:q f4:q b4:q db5!:q | f#4!:q r:q d#4!:8 c#4!:q e#4!:8 | a4:q c5:q ab4!:8 e4:8 d5:q | b4:h g4:h",
+"a4:q g4:q bb4!:8 a4:8 db4!:q | cb4!:q gb4!:q e4:h | f4:q eb4!:8 c5:8 d5:q a#4!:q | g#4!:h d4:h",
+"a4:h g#4!:q d5:q | f4:q c4:q e4:h | d4:8 eb4!:q b4:8 db5!:q g4:q | e4:8 f#4!:8 bb4!:q ab4!:h",
+"a4:h eb4!:q c4:q | g4:q d#4!:q r:q e4:q | f#4!:q b4:q c#5!:8 a#4!:8 d4:q | c5:qd a4:8 g#4!:h",
+"a4:q e4:q g4:q db4!:q | b4:h f4:q g#4!:q | r:q f#4!:8 b4:8 a4:qd c5:8 | eb5!:q cb5!:q d4:q e4:q",
+"a4:q f#4!:q r:q a#4!:q | d#4!:h e4:q f4:8 c#5!:8 | c5:q fb4!:q ab4!:8 d4:qd | b4:qd g4:8 a4:h",
+"a4:q eb4!:q f4:h | g4:q db4!:8 c4:8 r:q e4:q | b#4!:q f#4!:q g#4!:8 a#4!:qd | a4:qd b4:8 d5:q f4:q",
+"a4:h f4:q g#4!:q | bb4!:q d4:q g4:qd e4:8 | d#4!:q f#4!:8 e#4!:8 c5:q b4:q | eb4!:h c#4!:h",
+"a4:q g4:q c#5!:h | g4:q e4:q c4:8 gb4!:qd | r:q bb4!:8 c#4!:8 f4:q f#4!:q | d4:qd a4:8 e#4!:q g#4!:q",
+"a4:q g#4!:q b4:q r:q | c#5!:8 bb4!:qd f4:q e4:q | eb4!:h g4:8 a#4!:q d5:8 | a4:qd f#4!:8 b#4!:q d4:q",
+"a4:q b4:q f4:q c#4!:q | e4:qd d4:8 db4!:q c5:q | f#4!:q r:q g4:q b4:8 ab4!:8 | e4:8 bb4!:qd g#4!:q e#4!:q",
+"a4:q f4:q f#4!:h | c#5!:q bb4!:8 f4:8 g#4!:h | d4:q g4:q eb5!:8 b4:qd | f4:q e4:q c5:q a#4!:q",
+"a4:q c4:q e4:q b4:q | d5:8 eb4!:qd db4!:q f4:q | bb4!:q r:q g4:q g#4!:8 a#4!:8 | f4:q e4:q f#4!:q b#4!:q",
+"a4:h f4:q e4:q | g4:8 c#5!:qd f#4!:q eb4!:q | g#4!:8 e4:8 bb4!:q c5:h | e#4!:qd a4:8 d4:q b4:q",
+"a4:q b4:q g4:q db5!:q | e4:qd f4:8 bb4!:q gb4!:q | c5:8 f#4!:q d4:8 c#4!:h | b4:8 g4:qd a#4!:q e4:q",
+"a4:h a#4!:q f4:q | c#4!:q d4:q g4:qd e4:8 | d#4!:h g#4!:q c5:8 b4:8 | f#4!:q a4:q cb5!:8 eb4!:qd",
+"a4:q db5!:q g4:h | f4:q g#4!:q f#4!:8 d4:8 e4:q | d#4!:qd a#4!:8 c5:q g4:q | r:q c4:q bb4!:q ab4!:q",
+"a4:q c#5!:q b4:qd g4:8 | bb4!:q g#4!:8 e4:8 r:q c5:q | d5:h eb4!:q a4:q | bb4!:8 c4:qd f#4!:q e#4!:q",
+"a4:q g#4!:q e4:q bb4!:q | a4:8 d4:qd eb4!:q c5:q | ab4!:8 cb5!:q g4:8 f4:q c#4!:q | b4:h a4:q gb4!:q",
+"a4:q b4:q f4:h | e4:q g4:q ab4!:q db4!:q | bb4!:q r:q fb4!:qd a4:8 | c#4!:q f#4!:8 g4:8 d5:q eb4!:q",
+"a4:q f4:q g4:qd d4:8 | c4:q ab4!:q r:q eb4!:q | f4:h d5:8 bb4!:8 cb5!:q | gb4!:8 e4:qd c#4!:q b4:q",
+"a4:q c5:q bb4!:h | d5:q g4:q ab4!:8 f4:qd | d4:q b4:q c5:qd f#4!:8 | e#4!:q b4:q c#5!:8 d#4!:8 e4!:q",
+"a4:q g4:q d4:q eb4!:q | bb4!:q r:q f4:q e4:8 c#5!:8 | b#4!:q a4:q g#4!:q d4:q | c4:qd b4:8 f#4!:h",
+"a4:h c5:q g4:q | ab4!:q bb4!:q d4:8 eb4!:qd | gb4!:h e4:q b4:q | d4:qd e#4!:8 g#4!:8 a4:8 c#4!:q",
+"a4:q bb4!:q g4:8 f#4!:qd | eb4!:q f4:q c5:q r:q | a4:q c#4!:q b4:q g#4!:8 e#4!:8 | d4:h e4:q a#4!:q",
+"a4:q f4:q e4:q d#4!:q | g#4!:q b4:8 c#4!:8 r:q d5:q | c5:q g4:q ab4!:8 fb4!:qd | bb4!:q c4:q f#4!:h",
+"a4:q g4:q eb4!:qd f4:8 | d4:q e4:q bb4!:q r:q | c5:q f#4!:q b4:8 e4:qd | d4:8 c#5!:q b#4!:8 a4:q g#4!:q",
+"a4:q f4:q bb4!:qd c5:8 | db5!:q r:q ab4!:8 g4:8 b4:q | e4:q c#5!:q d4:8 gb4!:qd | fb4!:h eb4!:q g4:q",
+"a4:q c5:q b4:8 f#4!:qd | g4:q bb4!:q e4:h | r:q f4:q d#4!:8 c#5!:8 g4:q | ab4!:qd cb5!:8 bb4!:q d4:q",
+"a4:qd bb4!:8 g4:q f4:q | c5:q b4:8 e4:8 r:q d#4!:q | b4:q a#4!:q e#4!:8 c#5!:qd | d5:q ab4!:q c4:q f#4!:q",
+"a4:q e4:q c5:q g4:q | f#4!:h bb4!:qd a4:8 | eb4!:q r:q d4:q c#5!:q | b4:q f#4!:8 e#4!:8 b4:q ab4!:q",
+"a4:q c#5!:q b4:qd g4:8 | f4:q gb4!:q bb4!:q r:q | e4:q d5:q c5:8 eb4!:q f#4!:8 | e#4!:q c4:q ab4!:h",
+"a4:q b4:q g4:qd f#4!:8 | d4:q r:q eb4!:q c4:q | g#4!:q e4:q a4:8 bb4!:q f4:8 | d4:q c#5!:q b#4!:q g4:q",
+"a4:h g#4!:q f#4!:q | e4:q b4:8 c5:8 g4:q ab4!:q | fb4!:q r:q d4:q c#5!:q | bb4!:8 f4:qd g4:q eb5!:q",
+"a4:q g4:q d4:q e4:q | g#4!:qd f#4!:8 b4:h | c5:q e4:q bb4!:8 db5!:8 f4:q | eb5!:h c5:8 gb4!:qd",
+"a4:q g4:q eb4!:8 f4:8 bb4!:q | c5:q e4:q f#4!:h | b4:8 e4:q d5:8 r:q g#4!:q | b#4!:h a4:q c#4!:q",
+"a4:q e4:q c5:q g4:q | a#4!:qd e4:8 g#4!:q r:q | f4:q b4:q eb4!:8 c#5!:q a4:8 | bb4!:q d4:q gb4!:h",
+"a4:q b4:q e4:q f#4!:q | a#4!:q g4:q | bb4!:8 c5:q d4:8 a4:q e4:q | f4:8 g4:8 c#5!:q e#4!:h",
+"a4:q e4:q d4:q ab4!:q | g4:q f#4!:q b4:8 eb4!:qd | r:q f4:8 g4:8 c#5!:q a#4!:q | d#4!:q c5:q g#4!:8 e4:qd",
+"a4:q f4:q d4:q g#4!:q | f#4!:q c5:8 e4:8 ab4!:h | b4:q c#4!:q e#4!:q d5:q | c5:q bb4!:8 a4:8 eb4!:h",
+"a4:qd e4:8 bb4!:q f4:q | eb4!:q d4:8 f#4!:8 db4!:h | c5:q a4:q g#4!:8 e#4!:qd | g4:q c#5!:q b4:h",
+"a4:q d4:q b4:qd bb4!:8 | g4:q ab4!:q c5:q e4:q | f4:q eb4!:q g#4!:qd f#4!:8 | d4:q c#5!:8 b4:8 g4:h",
+"a4:q g4:8 f4:8 e4:q b4:q | b4:h c4:q eb4!:q | r:q d4:8 f#4!:8 e#4!:q a#4!:q | b4:h c#5!:h",
+"a4:q g4:q d#4!:q b4:q | f#4!:qd g#4!:8 e#4!:h | e4:q c5:q f4:8 d4:q bb4!:8 | g4:qd c#5!:8 d5:h",
+"a4:q a#4!:q r:q f4:q | c#5!:q d4:q ab4!:qd e4:8 | d#4!:h g4:q c5:8 b4:8 | a4:q f#4!:q c5:8 eb4!:qd",
+"a4:q bb4!:q ab4!:8 f4:8 r:q | e4:8 f#4!:qd b4:q c5:q | db5!:q g4:q e4:q c#5!:q | eb4!:h d5:q b4:q",
+"a4:q bb4!:q g4:qd db4!:8 | f4:q b4:h d4:h | r:q a4:8 f#4!:8 c5:q d4:q | d#4!:q e4:q ab4!:q g4:q",
+"a4:q c4:q e4:q c#5!:q | g4:q bb4!:8 cb5!:8 ab4!:h | db4!:qd e4:8 a4:q f#4!:q | eb4!:q c5:q d5:q b4:q",
+"a4:q g#4!:q f#4!:q c5:q | d4:h bb4!:q f4:q | r:q b4:8 g4:8 c#4!:q e4:q | d#4!:qd a4:8 e#4!:h",
+"a4:q bb4!:q e4:qd ab4!:8 | f4:q b4:8 eb4!:8 c#5!:h | g4:h c5:q d#4!:q | e#4!:q g4:q db4!:h",
+"a4:h b4:q f4:q | e4:qd db4!:8 eb4!:q c5:q | f#4!:q a#4!:q g4:8 d#4!:qd | g#4!:q d4:8 f4:8 c#5!:h",
+"a#4!:q b4:q d5:qd c5:8 | bb4!:q r:q f#4!:q e4:q | ab4!:8 c#4!:q d#4!:8 b4:q g4:q | f4:q a4:q d5:h",
+"a#4!:q f4:q e4:q g#4!:q | d4:q a4:8 eb4!:8 db4!:q r:8 b4:8 | c5:q f#4!:q e4:8 bb4!:qd | g4:h fb4!:h",
+"bb4!:q f4:q eb4!:h | g#4!:8 f#4!:qd b4:q a4:q | c4:qd g4:8 e4:q a#4!:q | d5:q c#5!:8 f4:8 b#4!:h",
+"a#4!:h c5:q g4:q | f#4!:qd e4:8 b4:h | cb5!:q eb4!:q a4:qd f4:8 | c#4!:8 d4:8 b4:q g#4!:h",
+"bb4!:q e4:q f#4!:q r:q | c5:qd f4:8 gb4!:h | fb4!:q a4:8 d4:8 c#5!:q g4:q | db4!:q b4:q eb4!:h",
+"bb4!:q ab4!:q f4:q c5:q | g4:h eb4!:8 f#4!:qd | e#4!:q b4:8 d4:8 c#5!:q d#4!:q | e4:h a4:h",
+"bb4!:q g4:q d#4!:h | a4:q c#5!:q f#4!:qd e#4!:8 | r:q d4:q gb4!:q c5:q | b4:8 f4:8 d5:q g#4!:h",
+"bb4!:q a4:q f4:h | f#4!:q c4:q db4!:qd e4:8 | b4:q ab4!:8 eb4!:8 r:q gb4!:q | f4:qd ab4!:8 d5:q g4:q",
+"bb4!:q f4:q a4:h | g#4!:q r:q f#4!:8 c5:8 eb4!:q | gb4!:h b4:q e4:8 db5!:8 | ab4!:q d4:q e4:q g4:q",
+"bb4!:q f#4!:q e4:h | a4:q g#4!:8 c5:8 r:q b4:q | eb4!:q gb4!:q f4:8 c#5!:qd | d4:q g4:q b#4!:h",
+"a#4!:q f4:q g4:h | f#4!:q a4:q c4:8 g#4!:qd | e4:q bb4!:q eb4!:q c4:8 d4:8 | b4:q gb4!:q d4:qd c#5!:8",
+"bb4!:h ab4!:q g4:q | f#4!:q d4:q e4:8 c#5!:qd | d4:h c4:8 b3:8 f4:q | eb4!:8 a4:qd f4:q cb5!:q",
+"a#4!:q g#4!:q d4:h | gb4!:8 f4:q c4:8 r:q e4:q | b4:q eb4!:q g4:qd gb4!:8 | a4:q db4!:q f#4!:8 c5:qd",
+"a#4!:q b4:q c#4!:qd e4:8 | a4:q g4:8 f4:8 ab4!:h | r:q cb5!:q eb4!:q g4:q | bb4!:8 d4:qd c5:q f#4!:q",
+"bb4!:q a4:q c#4!:qd e4:8 | gb4!:q f4:q r:q a4:q | c5:qd db5!:8 g4:q ab4!:q | e4:q d5:8 c#5!:8 f#4!:h",
+"bb4!:q ab4!:q d4:q e4:q | g4:8 eb4!:8 f4:q c#5!:q r:q | db4!:h a4:q g4:q | d5:8 b4:qd e#4!:q f#4!:q",
+"bb4!:q g4:q e4:qd f4:8 | c4:q ab4!:q r:q cb5!:q | db4!:h b4:q a4:q | f#4!:8 eb4!:8 d5:q g#4!:h",
+"bb4!:q a4:q f#4!:qd g#4!:8 | a4:q c5:q b4:h | bb4!:q d4:q c#4!:8 e#4!:qd | g4:q c#5!:q d5:8 e4:8 a4:q",
+"bb4!:q c5:q ab4!:q bb4:q | f4:q e4:8 g#4!:8 a#4!:h | d5:q e4:q f4:8 b4:qd | a4:q d#4!:q e#4!:q g4:q",
+"a#4!:q c#5!:q d5:8 b4:qd | a4:q g4:q r:q db4!:q | e4:8 g#4!:8 d5:q a4:qd eb4!:8 | f4:q cb5!:q bb4!:h",
+"bb4!:q ab4!:q g4:qd c5:8 | d5:q r:q c#5!:q a4:q | d4:8 e4:q f#4!:8 b4:q c4:q | d4:q g#4!:q e#4!:h",
+"bb4!:q ab4!:q c5:h | g4:q f#4!:8 e4:8 c#4!:q d4:q | f4:8 c#5!:qd b#4!:q g4:q | r:q e4:q db5!:q f4:q",
+"bb4!:q g4:q f#4!:q d4:8 e4:8 | a4:q g4:q c5:h | db5!:8 cb5!:qd f4:q ab4!:q | bb4!:qd e4:8 d5:h",
+"bb4!:q a4:q f#4!:qd g4:8 | e#4!:q a4:q c#4!:q r:q | d4:h ab4!:8 f4:q e4:8 | g4:q db5!:q c5:8 f4:qd",
+"bb4!:q db5!:q c5:qd g4:8 | f4:q bb4!:q r:q c5:q | b4:8 f#4!:q e#4!:8 a4:q d#4!:q | c4:8 ab4!:qd e4:h",
+"bb4!:q g#4!:q a4:q c#5!:q | b#4!:q f#4!:8 g4:8 d5:h | f4:q eb4!:q cb5!:8 g4:qd | a4:q e4:q r:q c5:q",
+"bb4!:q g4:q a4:q db5!:q | c5:qd eb5!:8 gb4!:h | e4:8 ab4!:8 d4:q c4:qd b4:8 | f#4!:h e#4!:h",
+"bb4!:q ab4!:q f4:q c5:q | b4:h e4:8 a4:qd | g#4!:q d5:8 e4:8 f#4!:q e#4!:q | c#4!:qd b4:8 d4:q f4:q",
+"a#4!:q g#4!:q e4:q f4:q | d4:h r:q bb4!:q | cb5!:8 db5!:qd f4:q eb4!:q | d4:8 c4:q b4:8 g4:q ab4!:q",
+"bb4!:q db5!:q g4:qd eb4!:8 | d4:q b4:q r:q g#4!:q | d5:q e4:8 ab4!:8 fb4!:h | c4:qd f4:8 gb4!:h",
+"bb4!:q c5:q a4:q e4:8 f#4!:8 | g4:q c4:q db4!:8 ab4!:qd | fb4!:q cb5!:q r:q e4:q | d4:q c#4!:q b4:8 f4:qd",
+"bb4!:q a4:q d4:qd e4:8 | g4:q b4:q eb4!:q r:q | f4:8 bb4!:q cb5!:8 d4:q gb4!:q | f4:qd db4!:8 c4:q f#4!:q",
+"a#4!:q b4:q e4:8 f4:8 d4:q | bb4!:q c5:q f#4!:h | g4:qd f4:8 a4:q ab4!:q | cb5!:qd db4!:8 f4:h",
+"a#4!:q e4:q f4:q c5:q | b4:qd c#4!:8 f#4!:q r:q | a4:q ab4!:q d5:qd gb4!:8 | f4:q a4:8 b4:8 g#4!:h",
+"bb4!:q a4:q c5:qd f4:8 | e4:q eb4!:8 g#4!:8 d4:q r:q | c4:q c#4!:q f#4!:qd g4:8 | b4:h e#4!:h",
+"bb4!:q gb4!:q d4:qd e4:8 | c4:8 ab4!:8 g4:q r:q f4:q | d5:h a4:qd b4:8 | a#4!:q d#4!:q b#4!:h",
+"bb4!:q d4:q f#4!:qd g4:8 | e4:q c#5!:q b#4!:h | f4:8 e4:8 b3:q c4:q g#4!:q | d4:h a#4!:h",
+"bb4!:q f4:q e4:q ab4!:q | d4:qd c#4!:8 b4:h | db5!:q a4:8 b4:8 eb4!:q f4:q | g#4!:h c5:h",
+"bb4!:q g4:q f4:q eb4!:q | ab4!:qd f#4!:8 b4:h | b#4!:q d5:8 c#5!:8 g4:q e4:q | bb4!:q c4:q a4:h",
+"bb4!:q a4:q f4:8 c#5!:qd | b4:q g#4!:q c4:h | f4:8 e4:q g4:8 d4:q f#4!:q | e#4!:h c#4!:h",
+"bb4!:q f4:8 d4:8 f#4!:q g4:q | a4:qd g#4!:8 b4:q c#5!:q | a4:q d#4!:q e4:q c4:q | g4:qd e#4!:8 f#4!:h",
+"bb4!:q a4:q f#4!:qd g4:8 | a4:q c#5!:q b#4!:h | c4:q g#4!:q e4:8 f4:q b4:8 | bb4!:qd d4:8 eb4!:h",
+"a#4!:q d4:q b4:q e4:8 g4:8 | g#4!:qd e#4!:8 c5:h | c#5!:q e4:q bb4!:q a4:q | f4:8 c#4!:qd e4:h",
+"bb4!:q d4:q g#4!:qd a4:8 | c#5!:q f4:8 e4:8 b4:h | f4:q db5!:q c5:8 eb4!:qd | c#4!:q g4:q f#4!:h",
+"bb4!:q e4:q f4:q b4!:q | c5:qd f#4!:8 d#4!:h | g4:8 ab4!:8 gb4!:q c4:q e4:q | eb4!:q b4:q c5:h",
+"bb4!:q a4:q f#4!:q c5:q | b4:h e4:8 a#4!:qd | g#4!:q b4:8 e#4!:8 d#4!:q c#4!:q | f4:h e4:h",
+"a#4!:q b4:8 g4:8 e4:q f4:q | d#4!:h b4:h | bb4!:q c5:q db5!:8 eb4!:qd | a4:qd f#4!:8 g4:h",
+"bb4!:q d5:8 c#5!:8 g4:q f4:q | a#4!:q g#4!:h e#4!:q | r:q d4:q c4:8 e4:8 b4:q | a#4!:h d5:h",
+"a#4!:q b4:q f#4!:8 e#4!:q g4:8 | a4:8 d5:qd g4:q eb4!:q | r:q g#4!:q e4:q c5:q | g4:qd a4:8 ab4!:h",
+"bb4!:q gb4!:q f4:q c5:q | b4:h eb4!:8 a4:qd | f#4!:q d5:q g4:qd a4:8 | ab4!:q c#5!:q d4:8 e4:h",
+"a#4!:q f#4!:8 b4:8 e4:q d4:q | g#4!:h e#4!:h | a4:q g4:h eb4!:8 bb4!:8 | a4:q c5:q d5:h",
+"bb4!:q g4:q a4:q g#4!:q | e4:q c5:q db4!:h | c4:q f#4!:q g#4!:qd eb4!:8 | f4:q b4:8 d5:8 ab4!:h",
+"a#4!:h b4:q f4:8 c5:8 | g#4!:h d4:h | cb4!:q ab4!:q e4:8 g4:q c#5!:8 | b4:q d#4!:q a4:h",
+"bb4!:qd g4:8 a4:q c#5!:q | g#4!:h e#4!:q c5:q | a#4!:q f4:q b4:q d4:q | f#4!:q e4:8 g4:8 eb4!:h",
+"bb4!:q g4:q c5:q cb5!:q | ab4!:h bb4!:8 c#4!:qd | f4:q gb4!:q e4:8 d4:8 g#4!:q | b4:q e4:q a4:h",
+"a#4!:qd f#4!:8 g4:q d4:q | b4:h g#4!:h | a4:8 bb4!:8 db5!:q e4:q c#4!:q | f4:h eb4!:h",
+"a#4!:q f#4!:q b4:q d4:q | e4:qd a4:8 d#4!:h | c4:8 db4!:8 g4:q c5:q g#4!:q | eb4!:qd f4:8 fb4!:h",
+"bb4!:q eb4!:q f4:q g4:8 a4:8 | b4:q e4:q c#5!:h | r:q g4:q b4:8 a#4!:8 f#4!:q | g#4!:q c5:q d4:h",
+"bb4!:q a4:q c#5!:q b#4!:q | e4:h f#4!:h | d#4!:q e4:8 ab4!:8 g4:h | b4:q db4!:q g4:qd f4:8",
+"b4:q gb4!:q f4:q d4:q | ab4!:q g4:8 c#4!:8 e4:h | f4:q a4:8 db5!:8 c5:q f#4!:q | bb4!:h a4:h",
+"b4:q c5:q g#4!:h | f4:8 f#4!:8 a4:q db4!:q fb4!:q | r:q eb4!:q bb4!:8 a4:8 c#5!:q | d4:q e4:q b4:h",
+"b4:q d5:q ab4!:h | gb4!:q e4:8 f4:8 b4:q eb4!:q | r:q bb3!:8 c4:8 g4:q a4:q | b#4!:q c#5!:q f#4!:h",
+"b4:q c5:q gb4!:q e4:q | f4:q g4:8 bb4!:8 db4!:q r:q | c4:8 d4:8 a#4!:q g4:q c#5!:q | a4:q e#4!:q f#4!:h",
+"b4:h d5:q ab4!:q | e4:q r:q a4:8 g4:8 d#4!:q | f#4!:h e#4!:q c5:8 c#5!:8 | b4:q a4:q e4:q gb4!:q",
+"b4:q g4:q a4:h | a#4!:q b4:8 g#4!:8 d4:qd e4:8 | f#4!:h b#4!:q c#4!:q | eb4!:8 bb4!:qd f4:h",
+"b3:q eb4!:q f4:h | d4:qd f4:8 a#4!:q g4:q | r:q ab4!:q e4:q c5:8 b4:8 | f#4!:8 c#5!:qd b#4!:q e4:q",
+"b4:h c5:q a4:q | d4:q bb4!:8 ab4!:8 g4:q c#4!:q | r:q e4:q f4:8 eb4!:q f#4!:8 | c#4!:q e#4!:q a4:h",
+"b4:q g4:q f#4!:h | g#4!:q e4:8 ab4!:8 cb5!:h | f4:q bb4!:q r:q db4!:q | a4:8 f4:q d4:8 eb4!:h",
+"b4:q e4:q f4:q g#4!:q | c5:h bb4!:q d5:8 a4:8 | g4:q a#4!:q r:q b4:8 d#4!:8 | a4:q g4:q eb4!:q ab4!:q",
+"b4:q f4:q gb4!:q cb5!:q | ab4!:q d4:8 g4:8 c5:q r:q | g#4!:qd a4:8 d#4!:h | e4:q bb4!:q c#5!:qd d4:8",
+"b4:q a4:q bb4!:q gb4!:q | ab4!:q f4:8 g4:8 c#5!:h | b#4!:q g4:q e4:8 db5!:qd | a4:qd c4:8 e4:h",
+"b4:h g4:q a#4!:q | d5:q f4:8 c5:8 g#4!:q r:q | d4:8 e4:q bb4!:8 a4:q db5!:q | f#4!:q e#4!:q c#5!:h",
+"b4:q f#4!:q r:q eb4!:q | c5:8 g#4!:qd d4:q e4:q | c#5!:8 e#4!:q a#4!:8 g4:h | bb4!:qd a4:8 d5:h",
+"b4:h g4:q db5!:q | eb4!:8 f4:q a4:8 bb4!:q r:q | a4:8 f#4!:8 d#4!:q e4:q c5:q | b4:q g#4!:q a#4!:h",
+"b4:q f4:q eb4!:h | g4:8 c4:8 d#4!:q a4:q r:q | c5:8 g#4!:q a#4!:8 d4:q f#4!:q | e#4!:q c4:h bb4!:q",
+"b4:q c5:q gb4!:h | d4:h bb4!:q g#4!:q | a4:qd d#4!:8 g4:8 e4:8 f#4!:q | g#4!:q a#4!:q d4:q f4:q",
+"b4:q f4:q gb4!:h | eb4!:8 db4!:qd r:q c4:q | d4:8 g4:q bb4!:8 a4:q c#5!:q | b#4!:h e4:h",
+"b4:q c#5!:q g4:q f#4!:q | bb4!:q a4:8 g4:8 db4!:q r:q | c4:8 d4:q g#4!:8 e#4!:q a4:q | ab4!:q e4:q c5:h",
+"b4:h c5:q g#4!:q | a#4!:8 e4:q f4:8 g4:q r:q | d4:q c#4!:8 f#4!:8 c5:q bb4!:q | fb4!:h eb4!:h",
+"b4:q g4:q bb4!:q a4:q | f4:q d4:8 c4:8 e4:h | a4:q f#4!:8 g#4!:8 b#4!:q d4:q | r:q eb4!:q d5:q c#5!:q",
+"b4:q g4:q d#4!:qd c5:8 | d5:q bb4!:q ab4!:q r:q | a4:8 db5!:8 cb5!:q f4:q gb4!:q | e4:q d4:q c#5!:h",
+"b4:q c5:q a4:qd g4:8 | eb4!:h bb4!:q f4:q | a4:q d#4!:q e#4!:8 c#5!:qd | d5:q b4:q r:8 c4:8 f#4!:q",
+"b4:q a4:q eb4!:8 g4:qd | d#4!:q f#4!:8 g4:8 r:q c4:q | e4:q db5!:q c5:q f#4!:q | e#4!:h g#4!:h",
+"b4:q a4:q f4:q gb4!:q | ab4!:qd eb4!:8 d4:q db4!:q | r:q a#4!:q d5:8 b4:q g4:8 | b#4!:h c#5!:h",
+"b4:qd a4:8 d5:q c5:q | g4:q r:q ab4!:8 f4:8 e4:q | d4:h c#5!:q b#4!:q | g4:8 bb4!:qd eb4!:q f#4!:q",
+"b4:q g4:q c#5!:qd a4:8 | f4:q eb4!:q bb4!:h | d5:q g#4!:q c4:8 d4:8 f4:q | db5!:q cb5!:q e4:h",
+"b4:q a4:q f#4!:qd g#4!:8 | e4:q d#4!:q f4:q eb5!:q | r:q d5:q g4:q d4:8 bb4!:8 | cb5!:q ab4!:q c4:h",
+"b4:q a4:q e4:q f#4!:q | g4:8 d#4!:qd c4:q eb4!:q | d4:qd c#5!:8 b#4!:q g4:q | r:q f4:8 e4:8 c#4!:q a4:q",
+"b4:q g#4!:q a4:q c#5!:q | d5:q b4:8 e4:8 a4:q r:q | c5:qd gb4!:8 fb4!:q bb4!:q | c5:q d4:q ab4!:q f4:q",
+"b4:q d5:q c5:q g4:8 a4:8 | bb4!:qd eb4!:8 r:q f4:q | d#4!:q b#4!:q c#5!:8 g4:qd | e4:q d5:q f#4!:h",
+"b4:q a4:q f#4!:q g4:q | c5:q r:q bb4!:8 d4:qd | f4:q db5!:q eb4!:8 ab4!:qd | f4:q e4:q g#4!:h",
+"b4:q g4:q f#4!:qd e4:8 | bb4!:q eb4!:q f4:h | r:q ab4!:q d4:q c#5!:q | b#4!:q g#4!:8 a4:8 c4:h",
+"b4:qd a4:8 e4:q f#4!:q | g4:q bb4!:8 ab4!:8 f4:h | c4:q a4:q eb4!:q db4!:q | c5:8 f#4!:qd e#4!:q d5:q",
+"b4:q g4:q ab4!:q c5:q | b4:h eb4!:8 f4:qd | c5:q gb4!:q r:8 e4:8 a4:q | b4:qd f#4!:8 g#4!:q d5:q",
+"b4:h a4:q f#4!:q | g#4!:q e4:q b4:8 c5:8 ab4!:q | d5:h c#5!:q d#4!:q | e#4!:q r:q g4:8 eb5!:q a4:8",
+"b4:q g#4!:q a4:h | e4:qd d4:8 c#4!:q f#4!:q | g4:q r:q a4:8 eb4!:8 d5:q | bb4!:q cb5!:q f4:h",
+"b4:q g4:q eb4!:8 f4:qd | c#5!:h g#4!:q a4:q | db4!:8 f4:q bb4!:8 c4:h | e4:q r:q f#4!:q d#5!:q",
+"b4:q a4:q f#4!:q g4:q | e4:qd b4:8 c5:h | ab4!:8 d4:8 bb4!:q r:q c4:q | f#4!:q e#4!:q g4:q db5!:q",
+"b4:q f4:q g4:q c5:q | d4:q bb4!:8 ab4!:8 e4:h | f#4!:q b4:q eb4!:q c#4!:q | d4:8 a4:qd g#4!:q c4:q",
+"b4:q c5:q d4:qd ab4!:8 | eb4!:h bb4!:q f4:q | a#4!:q e4:q g4:8 d#4!:8 f4:q | f#4!:qd a4:8 g4:h",
+"b3:q c4:8 f4:8 f#4!:q e4:q | ab4!:q g4:q d5:h | r:q b4:q d5:8 a4:q eb4!:8 | b4:q c#5!:q bb4!:h",
+"b4:q g4:q db5!:qd c5:8 | a4:q bb4!:8 ab4!:8 f4:q r:q | e4:h b4:q c#4!:q | bb4!:h gb4!:h",
+"b3:q g#4!:h b4:8 a#4!:8 | a4:q f#4!:8 g4:8 e#4!:h | e4:q c#5!:h d4:q | bb4!:q eb4!:q c4:q f4:q",
+"b4:q g#4!:h a4:q | f#4!:q bb4!:8 a4:8 e4:q db4!:q | c4:q r:q g4:8 f4:8 b4:q | a#4!:q d5:q eb4!:h",
+"b4:h a#4!:q f#4!:q | c4:q g4:q eb4!:q a4:q | f4:q d4:8 c5:8 b4:q c#4!:q | d#4!:8 e4:8 f4:q bb4!:h",
+"b4:q f4:h g4:8 ab4!:8 | d4:h e#4!:q f#4!:q | c#5!:qd b4:8 g4:q bb4!:q | c4:h a4:q g#4!:q",
+"b4:q c5:8 ab4!:8 d4:q e4:q | g4:qd c#4!:8 d#4!:q r:q | a#4!:q b4:q f4:q c#5!:q | f#4!:q c4:h bb4!:q",
+"b4:q g#4!:q c5:qd f4:8 | f#4!:q a#4!:q d4:h | e4:q eb4!:8 g4:8 f4:q bb4!:q | gb4!:q d4:q c#5!:h",
+"b4:qd a4:8 eb4!:q gb4!:q | f4:8 d4:q f#4!:8 g#4!:h | c5:q d5:q c#5!:8 g4:qd | e4:q b4:q db4!:h",
+"b4:q c5:8 e4:8 bb4!:q f4:q | ab4!:q g4:q eb4!:q c#5!:q | d5:q f4:8 a4:8 f#4!:h | c4:q b4:q g#4!:h",
+"b4:q c5:q d4:qd ab4!:8 | db4!:h bb4!:q gb4!:q | a4:q e4:q g4:8 eb4!:8 f4:q | f#4!:qd d4:8 g#4!:h",
+"b4:q f#4!:q c5:q e4:q | eb4!:qd d4:8 bb4!:q ab4!:q | g4:q c#5!:8 f4:8 d5:h | a#4!:qd g#4!:8 b4:q c4:q",
+"b4:qd a4:8 g4:q c#5!:q | f4:h bb4!:q e4:q | r:q g4:8 db4!:8 eb4!:q c5:q | g#4!:qd a#4!:8 d#4!:h",
+"b4:h g4:qd ab4!:8 | f4:qd e4:8 c#5!:q b#4!:q | r:q e4:q d4:8 c#4!:q f4:8 | db5!:q c5:q f#4!:h",
+"b4:q f4:q e4:q bb4!:q | d4:q c#4!:8 e4:8 b#3!:h | f#4!:qd a4:8 d#4!:q c5:q | g#4!:h a#4!:h",
+"b4:q g#4!:q c5:8 bb4!:qd | c#5!:q b4:q d#4!:h | e4:8 g4:q f#4!:8 d5:q a4:q | eb4!:q f4:q c4:h"
+];
+
+const DUR_BEATS = { '8': 0.5, 'q': 1, 'qd': 1.5, 'h': 2, 'hd': 3 };
+function decodeSong(line, idx) {
+  const bars = line.split('|').map(bar => bar.trim().split(/\s+/).map(tok => {
+    const [p, d] = tok.split(':');
+    const beats = DUR_BEATS[d];
+    if (p === 'r') return { key: 'b/4', dur: d + 'r', beats, rest: true };
+    const m = /^([a-g])(##|#|bb|b)?(\d)(!)?$/.exec(p);
+    const accTxt = m[2] || '';
+    const printed = m[4] ? (accTxt || 'n') : null;   // 譜上實際印出的記號
+    const vfAcc = accTxt || (printed === 'n' ? 'n' : '');
+    return { key: `${m[1]}${vfAcc}/${m[3]}`, dur: d, beats, acc: printed };
+  }));
+  return { id: 'Q-' + String(idx + 1).padStart(3, '0'), no: idx + 1, title: `第 ${idx + 1} 題`, bars };
+}
+const SCORE_BANK = SONG_DATA.map(decodeSong);
+const TOTAL_SONGS = SCORE_BANK.length;
+
+// ================= 2. 速度控制同步邏輯（40–100 BPM） =================
+let currentBpm = 66;
+const bpmSlider = document.getElementById('bpmSlider');
+const bpmInput = document.getElementById('bpmInput');
+const presetBtns = document.querySelectorAll('.preset-btn');
+
+function setBpm(val, opts = {}) {
+  const { fromSlider = false, fromInput = false, announce = true } = opts;
+  const parsed = Number(val);
+  const base = Number.isFinite(parsed) ? parsed : currentBpm;
+  const clamped = Math.max(40, Math.min(100, Math.round(base)));
+  currentBpm = clamped;
+
+  // 拖曳滑桿進行中不回寫 slider.value，避免部分瀏覽器／平板觸控中斷拖曳手勢
+  if (!fromSlider && bpmSlider) {
+    bpmSlider.value = String(clamped);
+  }
+  if (!fromInput && bpmInput) {
+    bpmInput.value = String(clamped);
+  }
+  presetBtns.forEach(btn => {
+    btn.classList.toggle('active', Number(btn.dataset.bpm) === clamped);
+  });
+  if (typeof Tone !== 'undefined' && Tone.Transport && Tone.Transport.bpm) {
+    Tone.Transport.bpm.value = clamped;
+  }
+  if (announce && !isRunning) {
+    const phaseEl = document.getElementById('phaseText');
+    if (phaseEl) {
+      phaseEl.textContent = `⏱ 目前速度已設為 ${clamped} BPM：請按「開始視唱」或「從頭播到尾」。`;
+    }
+  }
+}
+
+if (bpmSlider) {
+  bpmSlider.addEventListener('input', e => setBpm(e.target.value, { fromSlider: true }));
+  bpmSlider.addEventListener('change', e => setBpm(e.target.value, { fromSlider: false }));
+}
+if (bpmInput) {
+  bpmInput.addEventListener('input', e => {
+    const raw = e.target.value.trim();
+    if (raw === '') return;
+    const v = Number(raw);
+    if (Number.isFinite(v) && v >= 40 && v <= 100) {
+      setBpm(v, { fromInput: true });
+    }
+  });
+  bpmInput.addEventListener('change', e => setBpm(e.target.value));
+  bpmInput.addEventListener('blur', e => setBpm(e.target.value));
+}
+document.getElementById('bpmMinus5').addEventListener('click', () => setBpm(currentBpm - 5));
+document.getElementById('bpmMinus1').addEventListener('click', () => setBpm(currentBpm - 1));
+document.getElementById('bpmPlus1').addEventListener('click', () => setBpm(currentBpm + 1));
+document.getElementById('bpmPlus5').addEventListener('click', () => setBpm(currentBpm + 5));
+presetBtns.forEach(btn => {
+  btn.addEventListener('click', () => setBpm(btn.dataset.bpm));
+});
+setBpm(66, { announce: false });
+
+// ================= 3. 音高與頻率換算工具 =================
+const SEMI = { c:0, d:2, e:4, f:5, g:7, a:9, b:11 };
+function keyToMidi(k) {
+  const m = /^([a-g])(#{1,2}|b{1,2}|n)?\/(\d+)$/i.exec(k);
+  if (!m) return 60;
+  const base = SEMI[m[1].toLowerCase()];
+  const acc = m[2] === '#' ? 1 : m[2] === '##' ? 2 : m[2] === 'b' ? -1 : m[2] === 'bb' ? -2 : 0;
+  return (parseInt(m[3], 10) + 1) * 12 + base + acc;
+}
+const midiToFreq = m => 440 * Math.pow(2, (m - 69) / 12);
+const freqToMidi = f => 69 + 12 * Math.log2(f / 440);
+const NOTE_NAMES = ['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
+function midiToName(m) {
+  const r = Math.round(m);
+  return NOTE_NAMES[((r % 12) + 12) % 12] + (Math.floor(r / 12) - 1);
+}
+
+// ================= 4. 成績分級評語判定 =================
+function getScoreFeedback(pct) {
+  if (pct >= 85) return { text: '高手高高手', icon: '🏆', cls: 'fb-god' };
+  if (pct >= 70) return { text: '超棒的', icon: '🌟', cls: 'fb-great' };
+  if (pct >= 50) return { text: '哎喲～不錯喔', icon: '😎', cls: 'fb-good' };
+  if (pct >= 35) return { text: '加油加油，可以更好', icon: '💪', cls: 'fb-fair' };
+  if (pct >= 15) return { text: '我們再一起努力', icon: '🤝', cls: 'fb-low' };
+  return { text: '菜就多練><', icon: '🔥', cls: 'fb-rookie' };
+}
+
+function showResultCard(okCount, totalSingNotes, pct, bpm) {
+  const fb = getScoreFeedback(pct);
+  const card = document.getElementById('resultCard');
+  card.className = `result-card show ${fb.cls}`;
+  document.getElementById('resultIcon').textContent = fb.icon;
+  document.getElementById('resultComment').textContent = fb.text;
+  document.getElementById('resultDetail').textContent =
+    `本次速度 ${bpm} BPM｜共 ${okCount} / ${totalSingNotes} 音落在 ±20 音分內`;
+  document.getElementById('meterPct').textContent = `${pct}%`;
+  const fill = document.getElementById('meterFill');
+  fill.style.width = '0%';
+  requestAnimationFrame(() => {
+    fill.style.width = `${pct}%`;
+  });
+  return fb;
+}
+
+function hideResultCard() {
+  const card = document.getElementById('resultCard');
+  card.className = 'result-card';
+}
+
+// ================= 5. VexFlow 樂譜渲染（含第三線以上符桿自動朝下） =================
+let currentSong = SCORE_BANK[0];
+let renderedNotes = [];
+const TOLERANCE_CENTS = 20; // ±20 音分以內算準
+
+function renderScore(results = null) {
+  const { Renderer, Stave, StaveNote, Voice, Formatter, Accidental, Beam, Dot } = Vex.Flow;
+  const vexEl = document.getElementById('vex');
+  const ovEl = document.getElementById('overlay');
+  vexEl.innerHTML = '';
+  ovEl.innerHTML = '';
+  renderedNotes = [];
+
+  const renderer = new Renderer(vexEl, Renderer.Backends.SVG);
+  renderer.resize(1050, 210);
+  const ctx = renderer.getContext();
+
+  const widths = [300, 240, 240, 245];
+  let xPos = 12;
+  let flatIdx = 0;
+
+  currentSong.bars.forEach((bar, bIdx) => {
+    const stave = new Stave(xPos, 42, widths[bIdx]);
+    if (bIdx === 0) stave.addClef('treble').addTimeSignature('4/4');
+    if (bIdx === 3) stave.setEndBarType(Vex.Flow.Barline.type.END);
+    stave.setContext(ctx).draw();
+
+    const vfNotes = [];
+    const eighthGroups = [];
+    let curGroup = [];
+
+    bar.forEach((n) => {
+      const isDot = n.dur.endsWith('d');
+      const baseDur = isDot ? n.dur.slice(0, -1) : n.dur;
+
+      // auto_stem: true 會自動讓第三線 (B4) 及以上的音符符桿朝下
+      const sn = new StaveNote(
+        n.rest
+          ? { keys: ['b/4'], duration: baseDur }
+          : { keys: [n.key], duration: baseDur, auto_stem: true }
+      );
+
+      // 加上臨時升降記號與附點
+      if (!n.rest && n.acc) {
+        sn.addModifier(new Accidental(n.acc), 0);
+      }
+      if (isDot) Dot.buildAndAttach([sn]);
+
+      // 若已有評測結果，依音準結果幫音符上色
+      const res = results ? results[flatIdx] : null;
+      if (res && !n.rest) {
+        const color = res.status === 'ok' ? '#16a34a'
+                    : res.status === 'sharp' ? '#ea580c'
+                    : res.status === 'flat' ? '#2563eb' : '#94a3b8';
+        sn.setStyle({ fillStyle: color, strokeStyle: color });
+      }
+
+      // 八分音符自動兩兩連槓，第二參數 true 啟用自動符桿方向
+      if (!n.rest && baseDur === '8') {
+        curGroup.push(sn);
+        if (curGroup.length === 2) {
+          eighthGroups.push(new Beam(curGroup, true));
+          curGroup = [];
+        }
+      } else {
+        curGroup = [];
+      }
+
+      vfNotes.push(sn);
+      renderedNotes.push({
+        vfNote: sn,
+        midi: n.rest ? null : keyToMidi(n.key),
+        key: n.key,
+        beats: n.beats,
+        rest: !!n.rest,
+        result: res
+      });
+      flatIdx++;
+    });
+
+    const voice = new Voice({ num_beats: 4, beat_value: 4 }).setStrict(false).addTickables(vfNotes);
+    new Formatter().joinVoices([voice]).format([voice], widths[bIdx] - (bIdx === 0 ? 95 : 35));
+    voice.draw(ctx, stave);
+    eighthGroups.forEach(b => b.setContext(ctx).draw());
+
+    xPos += widths[bIdx];
+  });
+
+  // 取得每個音符實際 X 座標並繪製高低音分標籤
+  renderedNotes.forEach((item) => {
+    item.x = item.vfNote.getAbsoluteX();
+    if (item.result && !item.rest) {
+      const tag = document.createElement('div');
+      tag.className = 'pitch-tag';
+      tag.style.left = item.x + 'px';
+      if (item.result.status === 'ok') {
+        tag.classList.add('tag-ok');
+        tag.style.top = '14px';
+        tag.textContent = `✓ ${item.result.cents >= 0 ? '+' : ''}${item.result.cents}¢`;
+      } else if (item.result.status === 'sharp') {
+        tag.classList.add('tag-sharp');
+        tag.style.top = '10px';
+        tag.textContent = `↑ +${item.result.cents}¢ 偏高`;
+      } else if (item.result.status === 'flat') {
+        tag.classList.add('tag-flat');
+        tag.style.top = '168px';
+        tag.textContent = `↓ ${item.result.cents}¢ 偏低`;
+      } else {
+        tag.classList.add('tag-miss');
+        tag.style.top = '168px';
+        tag.textContent = '未偵測到';
+      }
+      ovEl.appendChild(tag);
+    }
+  });
+}
+
+// ================= 6. 聲音播放引擎（支援播放中即時變速） =================
+let synth = null, metroSynth = null;
+let timers = [];
+let isRunning = false;
+let playRunId = 0;
+
+async function ensureAudio() {
+  await Tone.start();
+  if (!synth) {
+    synth = new Tone.Synth({
+      oscillator: { type: 'triangle' },
+      envelope: { attack: 0.03, decay: 0.15, sustain: 0.65, release: 0.4 }
+    }).toDestination();
+  }
+  if (!metroSynth) {
+    metroSynth = new Tone.MembraneSynth({
+      pitchDecay: 0.01, octaves: 3, envelope: { attack: 0.001, decay: 0.08, sustain: 0 }
+    }).toDestination();
+    metroSynth.volume.value = -6;
+  }
+}
+
+function setCursor(x) {
+  const ov = document.getElementById('overlay');
+  let cur = document.getElementById('cursor');
+  if (x == null) { if (cur) cur.remove(); return; }
+  if (!cur) {
+    cur = document.createElement('div');
+    cur.id = 'cursor';
+    cur.className = 'beat-cursor';
+    ov.appendChild(cur);
+  }
+  cur.style.left = x + 'px';
+}
+
+function stopAll() {
+  playRunId++;
+  timers.forEach(id => clearTimeout(id));
+  timers = [];
+  isRunning = false;
+  stopMic();
+  setCursor(null);
+  document.getElementById('startSingBtn').disabled = false;
+  document.getElementById('playFullBtn').disabled = false;
+  document.getElementById('stopBtn').disabled = true;
+}
+
+// 僅播第一個音（固定 1.5 秒）
+let firstNoteTimer = null;
+document.getElementById('playFirstBtn').onclick = async () => {
+  await ensureAudio();
+  const firstNote = renderedNotes.find(n => !n.rest);
+  if (!firstNote) return;
+  const freq = midiToFreq(firstNote.midi);
+  const durSec = 1.5;
+  synth.triggerAttackRelease(freq, durSec);
+  setCursor(firstNote.x);
+  document.getElementById('phaseText').textContent = `🎵 第一個音提示：${midiToName(firstNote.midi)}（1.5 秒）`;
+  if (firstNoteTimer) clearTimeout(firstNoteTimer);
+  firstNoteTimer = setTimeout(() => { if (!isRunning) setCursor(null); }, durSec * 1000);
+};
+
+// 從頭播到尾（完整範唱，支援播放過程中即時調整 40-100 BPM）
+document.getElementById('playFullBtn').onclick = async () => {
+  stopAll();
+  await ensureAudio();
+  isRunning = true;
+  const myRun = ++playRunId;
+  document.getElementById('startSingBtn').disabled = true;
+  document.getElementById('playFullBtn').disabled = true;
+  document.getElementById('stopBtn').disabled = false;
+
+  const stepNote = (idx) => {
+    if (!isRunning || myRun !== playRunId) return;
+    if (idx >= renderedNotes.length) {
+      document.getElementById('phaseText').textContent = '✅ 完整範唱播放完畢。';
+      stopAll();
+      return;
+    }
+    const n = renderedNotes[idx];
+    const secPerBeat = 60 / currentBpm;
+    const durSec = n.beats * secPerBeat;
+    setCursor(n.x);
+    document.getElementById('phaseText').textContent =
+      `▶ 正在從頭播放完整範唱（目前速度：${currentBpm} BPM）...`;
+    if (!n.rest) {
+      synth.triggerAttackRelease(midiToFreq(n.midi), durSec * 0.9);
+    }
+    const tId = setTimeout(() => stepNote(idx + 1), durSec * 1000);
+    timers.push(tId);
+  };
+
+  stepNote(0);
+};
+
+// ================= 7. 麥克風即時基頻偵測（自相關法） =================
+let audioCtx = null, micStream = null, analyser = null, rafId = null;
+let notePitchSamples = [];
+let activeNoteIndex = -1;
+
+function autoCorrelate(buf, sampleRate) {
+  let rms = 0;
+  for (let i = 0; i < buf.length; i++) rms += buf[i] * buf[i];
+  rms = Math.sqrt(rms / buf.length);
+  if (rms < 0.015) return -1;
+
+  let r1 = 0, r2 = buf.length - 1, thres = 0.2;
+  for (let i = 0; i < buf.length / 2; i++) if (Math.abs(buf[i]) < thres) { r1 = i; break; }
+  for (let i = 1; i < buf.length / 2; i++) if (Math.abs(buf[buf.length - i]) < thres) { r2 = buf.length - i; break; }
+  const slice = buf.slice(r1, r2);
+  const c = new Array(slice.length).fill(0);
+  for (let i = 0; i < slice.length; i++) {
+    for (let j = 0; j < slice.length - i; j++) c[i] += slice[j] * slice[j + i];
+  }
+  let d = 0;
+  while (c[d] > c[d + 1]) d++;
+  let maxval = -1, maxpos = -1;
+  for (let i = d; i < slice.length; i++) {
+    if (c[i] > maxval) { maxval = c[i]; maxpos = i; }
+  }
+  let T0 = maxpos;
+  if (T0 <= 0) return -1;
+  const freq = sampleRate / T0;
+  return (freq >= 85 && freq <= 1100) ? freq : -1;
+}
+
+async function startMic() {
+  micStream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false }
+  });
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const src = audioCtx.createMediaStreamSource(micStream);
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 2048;
+  src.connect(analyser);
+
+  const buf = new Float32Array(analyser.fftSize);
+  const loop = () => {
+    analyser.getFloatTimeDomainData(buf);
+    const freq = autoCorrelate(buf, audioCtx.sampleRate);
+    if (freq > 0) {
+      const sungMidi = freqToMidi(freq);
+      if (showLivePitchHint) {
+        document.getElementById('livePitchText').textContent = `${midiToName(sungMidi)} (${Math.round(freq)}Hz)`;
+      } else {
+        document.getElementById('livePitchText').textContent = '🙈 盲測收音中...';
+      }
+      if (activeNoteIndex >= 0 && renderedNotes[activeNoteIndex] && !renderedNotes[activeNoteIndex].rest) {
+        const targetMidi = renderedNotes[activeNoteIndex].midi;
+        const cents = (sungMidi - targetMidi) * 100;
+        if (Math.abs(cents) < 600) {
+          notePitchSamples[activeNoteIndex].push(cents);
+          if (showLivePitchHint) {
+            const clamped = Math.max(-100, Math.min(100, cents));
+            document.getElementById('tunerNeedle').style.left = (50 + clamped / 2) + '%';
+          }
+        }
+      }
+    } else {
+      document.getElementById('livePitchText').textContent = showLivePitchHint ? '聆聽中...' : '🙈 盲測聆聽中...';
+    }
+    rafId = requestAnimationFrame(loop);
+  };
+  loop();
+}
+
+function stopMic() {
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = null;
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+  if (audioCtx) { audioCtx.close(); audioCtx = null; }
+  activeNoteIndex = -1;
+}
+
+// ================= 8. 視唱測驗主流程：首音 -> 預備拍 -> 演唱 -> 批改 =================
+document.getElementById('startSingBtn').onclick = async () => {
+  stopAll();
+  hideResultCard();
+  renderScore(null);
+  await ensureAudio();
+
+  try {
+    await startMic();
+  } catch (e) {
+    alert('無法開啟麥克風，請確認瀏覽器已允許麥克風權限！');
+    return;
+  }
+
+  isRunning = true;
+  document.getElementById('startSingBtn').disabled = true;
+  document.getElementById('playFullBtn').disabled = true;
+  document.getElementById('stopBtn').disabled = false;
+
+  const myRun = ++playRunId;
+  notePitchSamples = renderedNotes.map(() => []);
+
+  // 階段 1：播第一個音（全音符 4 拍，依當下 currentBpm 計算）
+  const firstNote = renderedNotes.find(n => !n.rest);
+  setCursor(firstNote.x);
+  const initBpm = currentBpm;
+  const firstDurSec = 4 * (60 / initBpm);
+  synth.triggerAttackRelease(midiToFreq(firstNote.midi), firstDurSec * 0.97);
+  document.getElementById('phaseText').textContent =
+    `🎵 階段 1／3（${initBpm} BPM）：聆聽第一個音（${midiToName(firstNote.midi)}，全音符 4 拍）...`;
+
+  const finishSingQuiz = () => {
+    if (!isRunning || myRun !== playRunId) return;
+    const finalBpm = currentBpm;
+    activeNoteIndex = -1;
+    let totalSingNotes = 0, okCount = 0;
+
+    const results = renderedNotes.map((n, idx) => {
+      if (n.rest) return { status: 'rest', cents: 0 };
+      totalSingNotes++;
+      const arr = notePitchSamples[idx].slice().sort((a, b) => a - b);
+      if (arr.length < 3) return { status: 'miss', cents: 0 };
+      const medianCents = Math.round(arr[Math.floor(arr.length / 2)]);
+      if (Math.abs(medianCents) <= TOLERANCE_CENTS) {
+        okCount++;
+        return { status: 'ok', cents: medianCents };
+      } else if (medianCents > TOLERANCE_CENTS) {
+        return { status: 'sharp', cents: medianCents };
+      } else {
+        return { status: 'flat', cents: medianCents };
+      }
+    });
+
+    stopAll();
+    renderScore(results);
+    const pct = totalSingNotes > 0 ? Math.round((okCount / totalSingNotes) * 100) : 0;
+    const fb = showResultCard(okCount, totalSingNotes, pct, finalBpm);
+    handleNotebookAfterQuiz(currentIdx, pct, finalBpm);
+
+    document.getElementById('summaryScore').textContent =
+      `音準得分：${okCount}/${totalSingNotes}（${pct}%）｜${fb.icon} ${fb.text}`;
+    document.getElementById('phaseText').textContent =
+      `🎉 測驗完成（${finalBpm} BPM）：${fb.text}（${okCount}/${totalSingNotes} 音準確）`;
+  };
+
+  // 階段 3：逐音動態排程（支援調整速度後下一音立刻套用新 BPM）
+  const stepSingNote = (idx) => {
+    if (!isRunning || myRun !== playRunId) return;
+    if (idx >= renderedNotes.length) {
+      const endId = setTimeout(finishSingQuiz, 120);
+      timers.push(endId);
+      return;
+    }
+    const n = renderedNotes[idx];
+    const stepBpm = currentBpm;
+    const durMs = n.beats * (60 / stepBpm) * 1000;
+    setCursor(n.x);
+    document.getElementById('phaseText').textContent =
+      `🎤 階段 3／3（${stepBpm} BPM）：請演唱！目前進度：第 ${idx + 1} 音`;
+    const sId = setTimeout(() => {
+      if (isRunning && myRun === playRunId) activeNoteIndex = idx;
+    }, Math.min(75, durMs * 0.2));
+    timers.push(sId);
+
+    const nextId = setTimeout(() => stepSingNote(idx + 1), durMs);
+    timers.push(nextId);
+  };
+
+  // 階段 2：4 拍預備拍動態排程（支援調整速度後下一拍立刻套用新 BPM）
+  const stepPrepBeat = (b) => {
+    if (!isRunning || myRun !== playRunId) return;
+    if (b > 4) {
+      stepSingNote(0);
+      return;
+    }
+    const beatBpm = currentBpm;
+    metroSynth.triggerAttackRelease(b === 1 ? 'C5' : 'G4', '16n');
+    document.getElementById('phaseText').textContent =
+      `⏱️ 階段 2／3（${beatBpm} BPM）：預備拍 ${b} / 4（準備進入演唱！）`;
+    const bid = setTimeout(() => stepPrepBeat(b + 1), (60 / beatBpm) * 1000);
+    timers.push(bid);
+  };
+
+  const prepStartId = setTimeout(() => stepPrepBeat(1), firstDurSec * 1000 + 150);
+  timers.push(prepStartId);
+};
+
+// ================= 9. 題庫選擇：指定題號 / 上下題 / 隨機抽題 =================
+const numInput = document.getElementById('songNum');
+const seen = new Set();           // 已隨機抽過的題目（0-based）
+let currentIdx = 0;
+document.getElementById('totalNum').textContent = TOTAL_SONGS;
+numInput.max = TOTAL_SONGS;
+
+function updateRandInfo() {
+  document.getElementById('randInfo').textContent =
+    `已隨機抽 ${seen.size} / ${TOTAL_SONGS} 題`;
+}
+
+function loadSong(idx, fromRandom = false) {
+  idx = Math.max(0, Math.min(TOTAL_SONGS - 1, idx));
+  stopAll();
+  hideResultCard();
+  currentIdx = idx;
+  currentSong = SCORE_BANK[idx];
+  numInput.value = idx + 1;
+  if (fromRandom) seen.add(idx);
+  updateRandInfo();
+  const existingTier = getSongTierInfo(idx);
+  document.getElementById('summaryScore').textContent = existingTier
+    ? `第 ${idx + 1} 題｜${existingTier.badge}（最近 ${existingTier.info.lastPct}%）`
+    : `第 ${idx + 1} 題｜尚未測驗`;
+  document.getElementById('phaseText').textContent =
+    '準備就緒：請按「開始視唱」，系統將先播第一個音，4 拍預備拍後直接演唱。';
+  try { history.replaceState(null, '', '#' + (idx + 1)); } catch (e) {}
+  renderScore();
+}
+
+function getPoolIndices() {
+  const mode = document.getElementById('poolSelect').value;
+  if (mode === 'master' || mode === 'improve' || mode === 'practice') {
+    return Object.keys(nbStore[mode]).map(Number).sort((a, b) => a - b);
+  }
+  if (mode.startsWith('nb:')) {
+    const nbId = mode.slice(3);
+    const nb = nbStore.custom.find(x => x.id === nbId);
+    return nb ? Object.keys(nb.items).map(Number).sort((a, b) => a - b) : [];
+  }
+  return null; // null = 全部 700 題
+}
+
+function pickRandom() {
+  const noRepeat = document.getElementById('optNoRepeat').checked;
+  const customIndices = getPoolIndices();
+
+  if (customIndices !== null && customIndices.length === 0) {
+    document.getElementById('phaseText').textContent =
+      '📭 目前選擇的練習本裡還沒有題目喔！先練幾題或切換回「全部題庫」吧。';
+    return;
+  }
+
+  const candidateList = customIndices !== null
+    ? customIndices
+    : Array.from({ length: TOTAL_SONGS }, (_, i) => i);
+
+  const build = () => candidateList.filter(i => {
+    if (noRepeat && seen.has(i)) return false;
+    return true;
+  });
+
+  let pool = build();
+  let wrapped = false;
+  if (!pool.length) {
+    candidateList.forEach(i => seen.delete(i));
+    pool = build();
+    wrapped = true;
+  }
+  if (!pool.length) return;
+
+  const idx = pool[Math.floor(Math.random() * pool.length)];
+  loadSong(idx, true);
+  if (wrapped) {
+    document.getElementById('phaseText').textContent =
+      '🔁 此範圍的題目都抽過一輪了，已重新開始。請按「開始視唱」。';
+  }
+}
+
+numInput.onchange = () => {
+  const v = parseInt(numInput.value, 10);
+  loadSong(Number.isFinite(v) ? v - 1 : currentIdx);
+};
+document.getElementById('prevBtn').onclick = () => loadSong((currentIdx - 1 + TOTAL_SONGS) % TOTAL_SONGS);
+document.getElementById('nextBtn').onclick = () => loadSong((currentIdx + 1) % TOTAL_SONGS);
+document.getElementById('randBtn').onclick = pickRandom;
+document.getElementById('resetSeenBtn').onclick = () => { seen.clear(); updateRandInfo(); };
+
+document.getElementById('stopBtn').onclick = () => {
+  stopAll();
+  document.getElementById('phaseText').textContent = '⏹ 已停止。';
+};
+
+
+// ================= 10. 即時音準提示開關 ＋ 測驗三分級練習本系統 =================
+const LIVE_HINT_KEY = 'sightSing_livePitchHint_v1';
+let showLivePitchHint = localStorage.getItem(LIVE_HINT_KEY) !== '0';
+
+function applyLivePitchHintUI() {
+  const btn = document.getElementById('toggleLivePitchBtn');
+  const bar = document.getElementById('tunerBar');
+  const txt = document.getElementById('livePitchText');
+  const needle = document.getElementById('tunerNeedle');
+  if (showLivePitchHint) {
+    btn.textContent = '👁️ 即時音準提示：開啟';
+    btn.classList.remove('off');
+    bar.classList.remove('masked');
+    if (!isRunning) txt.textContent = '—';
+  } else {
+    btn.textContent = '🙈 即時音準提示：關閉（盲測）';
+    btn.classList.add('off');
+    bar.classList.add('masked');
+    needle.style.left = '50%';
+    txt.textContent = isRunning ? '🙈 盲測收音中...' : '已關閉（唱完揭曉）';
+  }
+}
+
+document.getElementById('toggleLivePitchBtn').onclick = () => {
+  showLivePitchHint = !showLivePitchHint;
+  localStorage.setItem(LIVE_HINT_KEY, showLivePitchHint ? '1' : '0');
+  applyLivePitchHintUI();
+};
+
+const TIER_META = {
+  master: {
+    key: 'master',
+    icon: '🏆',
+    name: '拿手好歌本',
+    badge: '🏆 拿手好歌本',
+    rangeLabel: '85% 以上',
+    desc: '準確度達 85% 以上的拿手曲目，表現超水準！'
+  },
+  improve: {
+    key: 'improve',
+    icon: '💪',
+    name: '精益求精本',
+    badge: '💪 精益求精本',
+    rangeLabel: '50%–84%',
+    desc: '準確度介於 50%～84%，再多練幾次就能衝上 85% 拿手好歌本！'
+  },
+  practice: {
+    key: 'practice',
+    icon: '🌱',
+    name: '加強練習本',
+    badge: '🌱 加強練習本',
+    rangeLabel: '未滿 50%',
+    desc: '準確度未滿 50% 的潛力題目，針對音程重點補強就能順利晉級！'
+  }
+};
+const TIER_ORDER = ['master', 'improve', 'practice'];
+
+function getTierByPct(pct) {
+  if (pct >= 85) return 'master';
+  if (pct >= 50) return 'improve';
+  return 'practice';
+}
+
+const NB_STORAGE_KEY = 'sightSing_notebooks_v2';
+const LEGACY_DEFAULT_IDS = new Set(['nb_' + 'exam', 'nb_' + 'leap']);
+const LEGACY_DEFAULT_NAMES = new Set([
+  '\u8003\u524d\u885d\u523a',
+  '\u8003\u524d\u885d\u523a\u672c',
+  '\u5927\u8df3\u97f3\u7a0b\u7cbe\u9078',
+  '\u5927\u8df3\u97f3\u7a0b\u7cbe\u9078\u672c'
+]);
+
+function isRemovedDefaultNb(nb) {
+  if (!nb) return true;
+  const name = (nb.name || '').trim();
+  return LEGACY_DEFAULT_IDS.has(nb.id) || LEGACY_DEFAULT_NAMES.has(name);
+}
+
+function loadNbStore() {
+  try {
+    const raw = localStorage.getItem(NB_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.master === 'object' && typeof parsed.improve === 'object' && typeof parsed.practice === 'object' && Array.isArray(parsed.custom)) {
+        const beforeLen = parsed.custom.length;
+        parsed.custom = parsed.custom.filter(nb => !isRemovedDefaultNb(nb));
+        if (parsed.custom.length !== beforeLen) {
+          try { localStorage.setItem(NB_STORAGE_KEY, JSON.stringify(parsed)); } catch (e) {}
+        }
+        return parsed;
+      }
+    }
+    // 兼容遷移舊版 sightSing_notebooks_v1 資料
+    const oldRaw = localStorage.getItem('sightSing_notebooks_v1');
+    if (oldRaw) {
+      const oldParsed = JSON.parse(oldRaw);
+      if (oldParsed && typeof oldParsed === 'object') {
+        const migratedCustom = Array.isArray(oldParsed.custom)
+          ? oldParsed.custom.filter(nb => nb.id !== 'nb_good' && nb.name !== '拿手好歌' && !isRemovedDefaultNb(nb))
+          : [];
+        const migrated = {
+          master: {},
+          improve: {},
+          practice: typeof oldParsed.warmup === 'object' ? oldParsed.warmup : {},
+          custom: migratedCustom
+        };
+        try { localStorage.setItem(NB_STORAGE_KEY, JSON.stringify(migrated)); } catch (e) {}
+        return migrated;
+      }
+    }
+  } catch (e) {}
+  return {
+    master: {},   // >= 85% 拿手好歌本
+    improve: {},  // 50% - 84% 精益求精本
+    practice: {}, // < 50% 加強練習本
+    custom: []
+  };
+}
+let nbStore = loadNbStore();
+let activeNbTab = 'master';
+let lastQuizMeta = null;
+
+function saveNbStore() {
+  try { localStorage.setItem(NB_STORAGE_KEY, JSON.stringify(nbStore)); } catch (e) {}
+  refreshNotebookSelectors();
+}
+
+function getSongTierInfo(songIdx) {
+  const key = String(songIdx);
+  for (const t of TIER_ORDER) {
+    if (nbStore[t] && nbStore[t][key]) {
+      return { tier: t, ...TIER_META[t], info: nbStore[t][key] };
+    }
+  }
+  return null;
+}
+
+function formatNbTitle(rawName) {
+  const clean = (rawName || '').trim();
+  if (!clean) return '精選練習本';
+  return clean.endsWith('本') ? clean : clean + '本';
+}
+
+function refreshNotebookSelectors() {
+  const mCnt = Object.keys(nbStore.master).length;
+  const iCnt = Object.keys(nbStore.improve).length;
+  const pCnt = Object.keys(nbStore.practice).length;
+  document.getElementById('nbBadgeCount').textContent = `拿手 ${mCnt}｜精進 ${iCnt}｜加強 ${pCnt}`;
+
+  const poolSel = document.getElementById('poolSelect');
+  const prevVal = poolSel.value;
+  poolSel.innerHTML = `
+    <option value="all">全部題庫（${TOTAL_SONGS} 題）</option>
+    <option value="master">🏆 拿手好歌本（85% 以上｜${mCnt} 題）</option>
+    <option value="improve">💪 精益求精本（50%–84%｜${iCnt} 題）</option>
+    <option value="practice">🌱 加強練習本（未滿 50%｜${pCnt} 題）</option>
+    ${nbStore.custom.map(nb => `<option value="nb:${nb.id}">📁 ${formatNbTitle(nb.name)}（${Object.keys(nb.items).length} 題）</option>`).join('')}
+  `;
+  if ([...poolSel.options].some(o => o.value === prevVal)) {
+    poolSel.value = prevVal;
+  }
+}
+
+function handleNotebookAfterQuiz(songIdx, pct, bpm) {
+  const nowStr = new Date().toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' });
+  lastQuizMeta = { songIdx, pct, bpm, updatedAt: nowStr };
+  const key = String(songIdx);
+
+  // 找出先前所在的分級（並保留歷史最高分與練習次數）
+  let prevTier = null;
+  let prevInfo = null;
+  for (const t of TIER_ORDER) {
+    if (nbStore[t][key]) {
+      prevTier = t;
+      prevInfo = nbStore[t][key];
+      delete nbStore[t][key];
+    }
+  }
+
+  const newTier = getTierByPct(pct);
+  nbStore[newTier][key] = {
+    bestPct: prevInfo ? Math.max(prevInfo.bestPct, pct) : pct,
+    lastPct: pct,
+    attempts: (prevInfo && prevInfo.attempts ? prevInfo.attempts : 0) + 1,
+    bpm,
+    updatedAt: nowStr
+  };
+  saveNbStore();
+
+  renderResultNotebookBar(songIdx, pct, newTier, prevTier);
+}
+
+function renderResultNotebookBar(songIdx, pct, newTier, prevTier = null) {
+  const bar = document.getElementById('resultNotebookBar');
+  const key = String(songIdx);
+  const meta = TIER_META[newTier];
+
+  // 判斷是否有跨級進步
+  const tierRank = { practice: 1, improve: 2, master: 3 };
+  let transitionBadge = '';
+  if (prevTier && tierRank[newTier] > tierRank[prevTier]) {
+    transitionBadge = `<span class="nb-pill" style="background:#dcfce7;color:#166534;">🎊 從「${TIER_META[prevTier].name}」晉級了！</span>`;
+  } else if (prevTier && prevTier === newTier) {
+    transitionBadge = `<span class="nb-pill">🔄 已更新紀錄</span>`;
+  }
+
+  // 未滿 50%：自動歸入加強練習本
+  if (newTier === 'practice') {
+    bar.innerHTML = `
+      ${transitionBadge}
+      <span>🌱 <strong>已自動歸入「加強練習本」</strong>（未滿 50%）：把困難音程拆慢練穩，下次就能晉級！</span>
+      <button type="button" class="nb-save-btn" id="btnViewCurrentTier">查看加強練習本</button>
+    `;
+    document.getElementById('btnViewCurrentTier').onclick = () => openNotebookModal('practice');
+    return;
+  }
+
+  // 50% 以上（精益求精本 / 拿手好歌本）：顯示自動歸類結果 + 額外自訂「我想收進 XX 本」
+  const savedBooks = nbStore.custom.filter(nb => !!nb.items[key]);
+  const savedPills = savedBooks.map(nb => `
+    <span class="nb-pill">
+      📁 已額外收進「${formatNbTitle(nb.name)}」
+      <button type="button" data-remove-nb="${nb.id}" title="從此自訂本移除">✕</button>
+    </span>
+  `).join('');
+  const hasCustomBooks = nbStore.custom.length > 0;
+
+  bar.innerHTML = `
+    ${transitionBadge}
+    <span>${meta.icon} <strong>已自動歸入「${meta.name}」</strong>（${meta.rangeLabel}）</span>
+    <button type="button" class="nb-save-btn" id="btnViewCurrentTier">查看${meta.name}</button>
+    <span style="opacity:.45;">｜</span>
+    <span>我想額外收進</span>
+    <select id="nbQuickSelect" class="nb-inline-select">
+      ${nbStore.custom.map(nb => `<option value="${nb.id}">${nb.name}</option>`).join('')}
+      <option value="__new__">＋ 自訂新本名稱…</option>
+    </select>
+    <input type="text" id="nbCustomNameInput" class="nb-inline-input" placeholder="輸入自訂本名稱" style="display:${hasCustomBooks ? 'none' : 'inline-block'};">
+    <span>本</span>
+    <button type="button" class="sec-btn" id="btnAddToCustomNb" style="padding:5px 10px;font-size:.84rem;">＋ 收進自訂本</button>
+    ${savedPills}
+  `;
+
+  document.getElementById('btnViewCurrentTier').onclick = () => openNotebookModal(newTier);
+
+  const sel = document.getElementById('nbQuickSelect');
+  const inp = document.getElementById('nbCustomNameInput');
+  sel.onchange = () => {
+    if (sel.value === '__new__') {
+      inp.style.display = 'inline-block';
+      inp.focus();
+    } else {
+      inp.style.display = 'none';
+    }
+  };
+
+  document.getElementById('btnAddToCustomNb').onclick = () => {
+    let targetNb = null;
+    if (sel.value === '__new__') {
+      const rawName = inp.value.trim().replace(/本$/, '');
+      if (!rawName) {
+        inp.focus();
+        return;
+      }
+      targetNb = nbStore.custom.find(nb => nb.name === rawName);
+      if (!targetNb) {
+        targetNb = { id: 'nb_' + Date.now(), name: rawName, items: {} };
+        nbStore.custom.push(targetNb);
+      }
+    } else {
+      targetNb = nbStore.custom.find(nb => nb.id === sel.value);
+    }
+    if (!targetNb) return;
+
+    const qMeta = lastQuizMeta || {
+      songIdx,
+      pct,
+      bpm: currentBpm,
+      updatedAt: new Date().toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })
+    };
+    const prev = targetNb.items[key];
+    targetNb.items[key] = {
+      bestPct: prev ? Math.max(prev.bestPct, qMeta.pct) : qMeta.pct,
+      lastPct: qMeta.pct,
+      bpm: qMeta.bpm,
+      updatedAt: qMeta.updatedAt
+    };
+    saveNbStore();
+    renderResultNotebookBar(songIdx, pct, newTier, null);
+  };
+
+  bar.querySelectorAll('[data-remove-nb]').forEach(btn => {
+    btn.onclick = () => {
+      const nb = nbStore.custom.find(x => x.id === btn.dataset.removeNb);
+      if (nb) {
+        delete nb.items[key];
+        saveNbStore();
+        renderResultNotebookBar(songIdx, pct, newTier, null);
+      }
+    };
+  });
+}
+
+function openNotebookModal(tabId = 'master') {
+  activeNbTab = tabId;
+  renderNotebookModal();
+  document.getElementById('nbModal').classList.add('open');
+}
+
+function closeNotebookModal() {
+  document.getElementById('nbModal').classList.remove('open');
+}
+
+function renderNotebookModal() {
+  const tabsEl = document.getElementById('nbTabs');
+  const toolbarEl = document.getElementById('nbToolbar');
+  const bodyEl = document.getElementById('nbListBody');
+
+  let tabsHtml = TIER_ORDER.map(t => {
+    const m = TIER_META[t];
+    const cnt = Object.keys(nbStore[t]).length;
+    return `<button type="button" class="nb-tab tier-${t} ${activeNbTab === t ? 'active' : ''}" data-tab="${t}">${m.icon} ${m.name} (${cnt})</button>`;
+  }).join('');
+
+  nbStore.custom.forEach(nb => {
+    const cnt = Object.keys(nb.items).length;
+    tabsHtml += `<button type="button" class="nb-tab ${activeNbTab === nb.id ? 'active' : ''}" data-tab="${nb.id}">📁 ${formatNbTitle(nb.name)} (${cnt})</button>`;
+  });
+  tabsHtml += `<button type="button" class="nb-tab" id="btnCreateNbInModal" style="border-style:dashed;">＋ 新增自訂本</button>`;
+  tabsEl.innerHTML = tabsHtml;
+
+  tabsEl.querySelectorAll('[data-tab]').forEach(btn => {
+    btn.onclick = () => {
+      activeNbTab = btn.dataset.tab;
+      renderNotebookModal();
+    };
+  });
+  document.getElementById('btnCreateNbInModal').onclick = () => {
+    const name = prompt('請輸入新自訂練習本名稱（例如：三全音特訓、變化音練習）：');
+    if (!name || !name.trim()) return;
+    const clean = name.trim().replace(/本$/, '');
+    const exist = nbStore.custom.find(nb => nb.name === clean);
+    if (exist) {
+      activeNbTab = exist.id;
+    } else {
+      const created = { id: 'nb_' + Date.now(), name: clean, items: {} };
+      nbStore.custom.push(created);
+      activeNbTab = created.id;
+      saveNbStore();
+    }
+    renderNotebookModal();
+  };
+
+  if (TIER_META[activeNbTab]) {
+    const meta = TIER_META[activeNbTab];
+    const entries = Object.entries(nbStore[activeNbTab]).sort((a, b) => Number(a[0]) - Number(b[0]));
+    toolbarEl.innerHTML = `
+      <div><strong>${meta.icon} ${meta.name}（${meta.rangeLabel}）</strong>：${meta.desc}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button type="button" class="sec-btn" id="btnDrillTier" style="padding:5px 10px;font-size:.85rem;" ${entries.length ? '' : 'disabled'}>🎲 從此本抽題</button>
+        <button type="button" class="sec-btn" id="btnClearTier" style="padding:5px 10px;font-size:.85rem;color:#dc2626;border-color:#fca5a5;" ${entries.length ? '' : 'disabled'}>🗑️ 清空此本</button>
+      </div>
+    `;
+    document.getElementById('btnDrillTier').onclick = () => {
+      document.getElementById('poolSelect').value = activeNbTab;
+      closeNotebookModal();
+      pickRandom();
+    };
+    document.getElementById('btnClearTier').onclick = () => {
+      if (!confirm(`確定要清空「${meta.name}」內的所有題目紀錄嗎？`)) return;
+      nbStore[activeNbTab] = {};
+      saveNbStore();
+      renderNotebookModal();
+      const existingTier = getSongTierInfo(currentIdx);
+      document.getElementById('summaryScore').textContent = existingTier
+        ? `第 ${currentIdx + 1} 題｜${existingTier.badge}（最近 ${existingTier.info.lastPct}%）`
+        : `第 ${currentIdx + 1} 題｜尚未測驗`;
+    };
+
+    if (!entries.length) {
+      bodyEl.innerHTML = `<div style="text-align:center;padding:32px 12px;color:#64748b;">📭 「${meta.name}」目前還沒有題目。<br>完成視唱測驗後，準確度落在 <strong>${meta.rangeLabel}</strong> 的題目會自動歸入這裡！</div>`;
+      return;
+    }
+
+    bodyEl.innerHTML = entries.map(([idxStr, info]) => {
+      const idx = Number(idxStr);
+      const attTxt = info.attempts ? `｜已測 ${info.attempts} 次` : '';
+      return `
+        <div class="nb-item">
+          <div>
+            <div class="nb-item-title">第 ${idx + 1} 題</div>
+            <div class="nb-item-meta">最近準確度：<strong>${info.lastPct}%</strong>｜歷史最高：${info.bestPct}%｜速度：${info.bpm} BPM${attTxt}｜更新：${info.updatedAt}</div>
+          </div>
+          <div class="nb-item-actions">
+            <button type="button" class="nb-save-btn" data-jump-idx="${idx}">▶ 立即練習</button>
+            <button type="button" class="sec-btn" data-del-tier="${idxStr}" style="padding:5px 10px;font-size:.85rem;">移出</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    bodyEl.querySelectorAll('[data-jump-idx]').forEach(btn => {
+      btn.onclick = () => {
+        closeNotebookModal();
+        loadSong(Number(btn.dataset.jumpIdx));
+      };
+    });
+    bodyEl.querySelectorAll('[data-del-tier]').forEach(btn => {
+      btn.onclick = () => {
+        delete nbStore[activeNbTab][btn.dataset.delTier];
+        saveNbStore();
+        renderNotebookModal();
+      };
+    });
+  } else {
+    const nb = nbStore.custom.find(x => x.id === activeNbTab);
+    if (!nb) {
+      activeNbTab = 'master';
+      renderNotebookModal();
+      return;
+    }
+    const entries = Object.entries(nb.items).sort((a, b) => Number(a[0]) - Number(b[0]));
+    toolbarEl.innerHTML = `
+      <div><strong>📁 ${formatNbTitle(nb.name)}</strong>（自訂收藏本｜共 ${entries.length} 題）</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button type="button" class="sec-btn" id="btnDrillCustomNb" style="padding:5px 10px;font-size:.85rem;" ${entries.length ? '' : 'disabled'}>🎲 從此本抽題</button>
+        <button type="button" class="sec-btn" id="btnRenameNb" style="padding:5px 10px;font-size:.85rem;">✏️ 重新命名</button>
+        <button type="button" class="sec-btn" id="btnDeleteNb" style="padding:5px 10px;font-size:.85rem;color:#dc2626;border-color:#fca5a5;">🗑️ 刪除此本</button>
+      </div>
+    `;
+    document.getElementById('btnDrillCustomNb').onclick = () => {
+      document.getElementById('poolSelect').value = 'nb:' + nb.id;
+      closeNotebookModal();
+      pickRandom();
+    };
+    document.getElementById('btnRenameNb').onclick = () => {
+      const newName = prompt('請輸入新的練習本名稱：', nb.name);
+      if (!newName || !newName.trim()) return;
+      nb.name = newName.trim().replace(/本$/, '');
+      saveNbStore();
+      renderNotebookModal();
+    };
+    document.getElementById('btnDeleteNb').onclick = () => {
+      if (!confirm(`確定要刪除「${formatNbTitle(nb.name)}」嗎？`)) return;
+      nbStore.custom = nbStore.custom.filter(x => x.id !== nb.id);
+      activeNbTab = 'master';
+      saveNbStore();
+      renderNotebookModal();
+    };
+
+    if (!entries.length) {
+      bodyEl.innerHTML = `<div style="text-align:center;padding:32px 12px;color:#64748b;">📭 「${formatNbTitle(nb.name)}」目前還沒有題目。<br>視唱準確度達 <strong>50% 以上</strong>時，即可在成績卡片點選「我想額外收進 ${formatNbTitle(nb.name)}」！</div>`;
+      return;
+    }
+
+    bodyEl.innerHTML = entries.map(([idxStr, info]) => {
+      const idx = Number(idxStr);
+      return `
+        <div class="nb-item">
+          <div>
+            <div class="nb-item-title">第 ${idx + 1} 題</div>
+            <div class="nb-item-meta">最高準確度：<strong>${info.bestPct}%</strong>｜最近：${info.lastPct}%｜速度：${info.bpm} BPM｜收錄：${info.updatedAt}</div>
+          </div>
+          <div class="nb-item-actions">
+            <button type="button" class="nb-save-btn" data-jump-idx="${idx}">▶ 練習此題</button>
+            <button type="button" class="sec-btn" data-del-item="${idxStr}" style="padding:5px 10px;font-size:.85rem;">移出</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    bodyEl.querySelectorAll('[data-jump-idx]').forEach(btn => {
+      btn.onclick = () => {
+        closeNotebookModal();
+        loadSong(Number(btn.dataset.jumpIdx));
+      };
+    });
+    bodyEl.querySelectorAll('[data-del-item]').forEach(btn => {
+      btn.onclick = () => {
+        delete nb.items[btn.dataset.delItem];
+        saveNbStore();
+        renderNotebookModal();
+      };
+    });
+  }
+}
+
+document.getElementById('openNbBtn').onclick = () => openNotebookModal(activeNbTab);
+document.getElementById('closeNbBtn').onclick = closeNotebookModal;
+document.getElementById('nbModal').onclick = e => {
+  if (e.target.id === 'nbModal') closeNotebookModal();
+};
+
+document.getElementById('exportNbBtn').onclick = () => {
+  const blob = new Blob([JSON.stringify(nbStore, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '視唱分級練習本備份.json';
+  a.click();
+};
+document.getElementById('importNbBtn').onclick = () => document.getElementById('importNbFile').click();
+document.getElementById('importNbFile').onchange = e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (data && typeof data.master === 'object' && typeof data.improve === 'object' && typeof data.practice === 'object' && Array.isArray(data.custom)) {
+        data.custom = data.custom.filter(nb => !isRemovedDefaultNb(nb));
+        nbStore = data;
+        saveNbStore();
+        renderNotebookModal();
+        alert('✅ 練習本紀錄匯入成功！');
+      } else {
+        alert('檔案格式不符，請選擇先前匯出的備份 JSON 檔。');
+      }
+    } catch (err) {
+      alert('無法讀取 JSON 檔案。');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+};
+
+document.getElementById('resetNbBtn').onclick = () => {
+  if (!confirm('確定要重置「我的視唱練習本」的所有紀錄嗎？\n將會清空「拿手好歌本」、「精益求精本」、「加強練習本」以及所有「自訂收藏本」，此操作無法復原！')) {
+    return;
+  }
+  nbStore = {
+    master: {},
+    improve: {},
+    practice: {},
+    custom: []
+  };
+  try { localStorage.removeItem('sightSing_notebooks_v1'); } catch (e) {}
+  activeNbTab = 'master';
+  saveNbStore();
+  renderNotebookModal();
+  document.getElementById('poolSelect').value = 'all';
+  document.getElementById('summaryScore').textContent = `第 ${currentIdx + 1} 題｜尚未測驗`;
+  const nbBar = document.getElementById('resultNotebookBar');
+  if (nbBar) nbBar.innerHTML = '';
+  alert('✅ 已重置「我的視唱練習本」所有紀錄！');
+};
+
+applyLivePitchHintUI();
+refreshNotebookSelectors();
+
+(function init() {
+  const m = /^#(\d+)$/.exec(location.hash);
+  loadSong(m ? parseInt(m[1], 10) - 1 : 0);
+})();
+</script>
+</body>
+</html>
